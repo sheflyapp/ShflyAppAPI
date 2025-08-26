@@ -5,9 +5,79 @@ const Payment = require('../models/Payment');
 const Consultation = require('../models/Consultation');
 const User = require('../models/User');
 
-// @route   GET /api/payments
-// @desc    Get all payments (admin only)
-// @access  Private/Admin
+/**
+ * @swagger
+ * /api/payments:
+ *   get:
+ *     summary: Get all payments (admin only)
+ *     tags: [Payments - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of payments per page
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search term for transaction ID or description
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [all, pending, completed, failed, cancelled]
+ *         description: Filter by payment status
+ *       - in: query
+ *         name: method
+ *         schema:
+ *           type: string
+ *           enum: [all, credit_card, debit_card, bank_transfer, wallet]
+ *         description: Filter by payment method
+ *     responses:
+ *       200:
+ *         description: Payments retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     payments:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Payment'
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         currentPage:
+ *                           type: integer
+ *                         totalPages:
+ *                           type: integer
+ *                         totalPayments:
+ *                           type: integer
+ *                         limit:
+ *                           type: integer
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
 router.get('/', auth, isAdmin, async (req, res) => {
   try {
     const { page = 1, limit = 10, search = '', status = '', method = '' } = req.query;
@@ -66,9 +136,69 @@ router.get('/', auth, isAdmin, async (req, res) => {
   }
 });
 
-// @route   POST /api/payments
-// @desc    Create a new payment
-// @access  Private
+/**
+ * @swagger
+ * /api/payments:
+ *   post:
+ *     summary: Create a new payment
+ *     tags: [Payments - Seeker]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - consultationId
+ *               - amount
+ *               - paymentMethod
+ *               - description
+ *             properties:
+ *               consultationId:
+ *                 type: string
+ *                 description: ID of the consultation
+ *               amount:
+ *                 type: number
+ *                 description: Payment amount
+ *               currency:
+ *                 type: string
+ *                 default: USD
+ *                 description: Payment currency
+ *               paymentMethod:
+ *                 type: string
+ *                 enum: [credit_card, debit_card, bank_transfer, wallet]
+ *                 description: Payment method
+ *               description:
+ *                 type: string
+ *                 description: Payment description
+ *               metadata:
+ *                 type: object
+ *                 description: Additional payment metadata
+ *     responses:
+ *       201:
+ *         description: Payment created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   $ref: '#/components/schemas/Payment'
+ *       400:
+ *         description: Bad request - Missing required fields
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Consultation not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/', auth, async (req, res) => {
   try {
     const {

@@ -6,14 +6,10 @@ const options = {
     info: {
       title: 'Shfly App API',
       version: '1.0.0',
-      description: 'Complete API documentation for Shfly Consultation App',
+      description: 'Complete API documentation for Shfly consultation mobile app',
       contact: {
         name: 'Shfly Team',
         email: 'support@shfly.com'
-      },
-      license: {
-        name: 'MIT',
-        url: 'https://opensource.org/licenses/MIT'
       }
     },
     servers: [
@@ -24,6 +20,11 @@ const options = {
       {
         url: 'https://api.shfly.com',
         description: 'Production server'
+      }
+    ],
+    security: [
+      {
+        bearerAuth: []
       }
     ],
     components: {
@@ -39,19 +40,52 @@ const options = {
         User: {
           type: 'object',
           properties: {
-            _id: { type: 'string', description: 'User ID' },
-            fullname: { type: 'string', description: 'Full name of user' },
-            username: { type: 'string', description: 'Username' },
-            email: { type: 'string', format: 'email', description: 'Email address' },
+            _id: { type: 'string' },
+            fullname: { type: 'string', description: 'User full name' },
+            username: { type: 'string', description: 'Unique username' },
+            email: { type: 'string', format: 'email', description: 'User email' },
+            phone: { type: 'string', description: 'User phone number' },
             userType: { 
               type: 'string', 
               enum: ['admin', 'seeker', 'provider'],
-              description: 'Type of user'
+              description: 'User role type'
             },
-            phone: { type: 'string', description: 'Phone number' },
             profileImage: { type: 'string', description: 'Profile image URL' },
-            isVerified: { type: 'boolean', description: 'Email verification status' },
-            isActive: { type: 'boolean', description: 'Account active status' },
+            bio: { type: 'string', description: 'User bio' },
+            country: { type: 'string', description: 'User country' },
+            city: { type: 'string', description: 'User city' },
+            gender: { 
+              type: 'string', 
+              enum: ['male', 'female', 'other'],
+              description: 'User gender'
+            },
+            dob: { type: 'string', format: 'date', description: 'Date of birth' },
+            languages: { 
+              type: 'array', 
+              items: { type: 'string' },
+              description: 'Languages spoken'
+            },
+            isActive: { type: 'boolean', default: true, description: 'Account status' },
+            isVerified: { type: 'boolean', default: false, description: 'Verification status' },
+            rating: { type: 'number', description: 'Average rating (providers only)' },
+            totalReviews: { type: 'integer', description: 'Total number of reviews' },
+            price: { type: 'number', description: 'Consultation price (providers only)' },
+            specialization: { type: 'string', description: 'Category ID for specialization' },
+            availability: {
+              type: 'object',
+              properties: {
+                monday: { type: 'boolean' },
+                tuesday: { type: 'boolean' },
+                wednesday: { type: 'boolean' },
+                thursday: { type: 'boolean' },
+                friday: { type: 'boolean' },
+                saturday: { type: 'boolean' },
+                sunday: { type: 'boolean' }
+              }
+            },
+            chat: { type: 'boolean', description: 'Chat availability' },
+            call: { type: 'boolean', description: 'Call availability' },
+            video: { type: 'boolean', description: 'Video availability' },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' }
           }
@@ -60,20 +94,31 @@ const options = {
           type: 'object',
           properties: {
             _id: { type: 'string' },
+            title: { type: 'string', description: 'Consultation title' },
+            description: { type: 'string', description: 'Consultation description' },
             seeker: { type: 'string', description: 'Seeker user ID' },
             provider: { type: 'string', description: 'Provider user ID' },
             category: { type: 'string', description: 'Category ID' },
-            title: { type: 'string', description: 'Consultation title' },
-            description: { type: 'string', description: 'Consultation description' },
             status: { 
               type: 'string', 
-              enum: ['pending', 'accepted', 'rejected', 'completed', 'cancelled'],
+              enum: ['pending', 'accepted', 'in-progress', 'completed', 'cancelled'],
               description: 'Consultation status'
             },
-            scheduledAt: { type: 'string', format: 'date-time' },
-            duration: { type: 'number', description: 'Duration in minutes' },
-            price: { type: 'number', description: 'Price in currency' },
-            createdAt: { type: 'string', format: 'date-time' }
+            scheduledDate: { type: 'string', format: 'date-time', description: 'Scheduled date and time' },
+            duration: { type: 'integer', description: 'Duration in minutes' },
+            price: { type: 'number', description: 'Consultation price' },
+            paymentStatus: { 
+              type: 'string', 
+              enum: ['pending', 'paid', 'refunded'],
+              description: 'Payment status'
+            },
+            consultationType: { 
+              type: 'string', 
+              enum: ['chat', 'call', 'video'],
+              description: 'Type of consultation'
+            },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
           }
         },
         Category: {
@@ -83,7 +128,9 @@ const options = {
             name: { type: 'string', description: 'Category name' },
             description: { type: 'string', description: 'Category description' },
             icon: { type: 'string', description: 'Category icon' },
-            isActive: { type: 'boolean', description: 'Category active status' }
+            isActive: { type: 'boolean', default: true, description: 'Category status' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
           }
         },
         Payment: {
@@ -91,15 +138,125 @@ const options = {
           properties: {
             _id: { type: 'string' },
             consultation: { type: 'string', description: 'Consultation ID' },
+            seeker: { type: 'string', description: 'Seeker user ID' },
+            provider: { type: 'string', description: 'Provider user ID' },
             amount: { type: 'number', description: 'Payment amount' },
             currency: { type: 'string', default: 'USD' },
+            paymentMethod: { type: 'string', description: 'Payment method' },
             status: { 
               type: 'string', 
-              enum: ['pending', 'completed', 'failed', 'refunded'],
+              enum: ['pending', 'completed', 'failed', 'cancelled'],
               description: 'Payment status'
             },
+            transactionId: { type: 'string', description: 'External transaction ID' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        Chat: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            consultation: { type: 'string', description: 'Consultation ID' },
+            seeker: { type: 'string', description: 'Seeker user ID' },
+            provider: { type: 'string', description: 'Provider user ID' },
+            messages: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  sender: { type: 'string', description: 'Sender user ID' },
+                  message: { type: 'string', description: 'Message content' },
+                  messageType: { type: 'string', enum: ['text', 'image', 'file'], default: 'text' },
+                  timestamp: { type: 'string', format: 'date-time' },
+                  readBy: { type: 'array', items: { type: 'string' } }
+                }
+              }
+            },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        Notification: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            sender: { type: 'string', description: 'Sender user ID' },
+            recipient: { type: 'string', description: 'Recipient user ID' },
+            title: { type: 'string', description: 'Notification title' },
+            message: { type: 'string', description: 'Notification message' },
+            type: {
+              type: 'string',
+              enum: ['consultation', 'payment', 'system', 'chat'],
+              description: 'Notification type'
+            },
+            consultation: { type: 'string', description: 'Related consultation ID' },
+            isRead: { type: 'boolean', default: false },
+            readAt: { type: 'string', format: 'date-time' },
+            data: { type: 'object', description: 'Additional data' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        Review: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            seeker: { type: 'string', description: 'Seeker user ID' },
+            provider: { type: 'string', description: 'Provider user ID' },
+            consultation: { type: 'string', description: 'Consultation ID' },
+            rating: { type: 'integer', minimum: 1, maximum: 5, description: 'Rating from 1 to 5' },
+            comment: { type: 'string', description: 'Review comment' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        Availability: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            provider: { type: 'string', description: 'Provider user ID' },
+            date: { type: 'string', format: 'date', description: 'Date (YYYY-MM-DD)' },
+            startTime: { type: 'string', description: 'Start time (HH:MM)' },
+            endTime: { type: 'string', description: 'End time (HH:MM)' },
+            isAvailable: { type: 'boolean', default: true, description: 'Whether the time slot is available' },
+            maxBookings: { type: 'integer', default: 1, description: 'Maximum number of bookings for this slot' },
+            price: { type: 'number', description: 'Price for this time slot' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        Transaction: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            user: { type: 'string', description: 'User ID' },
+            type: {
+              type: 'string',
+              enum: ['deposit', 'withdrawal', 'transfer'],
+              description: 'Transaction type'
+            },
+            amount: { type: 'number', description: 'Transaction amount' },
+            currency: { type: 'string', default: 'USD' },
             paymentMethod: { type: 'string', description: 'Payment method used' },
-            transactionId: { type: 'string', description: 'External transaction ID' }
+            status: {
+              type: 'string',
+              enum: ['pending', 'completed', 'failed', 'cancelled'],
+              default: 'pending'
+            },
+            description: { type: 'string', description: 'Transaction description' },
+            bankDetails: { type: 'object', description: 'Bank account details for withdrawals' },
+            relatedUser: { type: 'string', description: 'Related user ID for transfers' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        Wallet: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            user: { type: 'string', description: 'User ID' },
+            balance: { type: 'number', default: 0, description: 'Current balance' },
+            currency: { type: 'string', default: 'USD', description: 'Currency' },
+            lastTransaction: { type: 'string', format: 'date-time' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
           }
         },
         Error: {
@@ -125,22 +282,32 @@ const options = {
       }
     },
     tags: [
-      { name: 'Authentication', description: 'User authentication endpoints' },
-      { name: 'Users', description: 'User management endpoints' },
-      { name: 'Admin', description: 'Admin-only endpoints' },
-      { name: 'Consultations', description: 'Consultation management endpoints' },
-      { name: 'Providers', description: 'Provider management endpoints' },
-      { name: 'Seekers', description: 'Seeker management endpoints' },
-      { name: 'Categories', description: 'Category management endpoints' },
-      { name: 'Payments', description: 'Payment management endpoints' },
-      { name: 'Chat', description: 'Chat functionality endpoints' },
-      { name: 'Search', description: 'Search functionality endpoints' },
-      { name: 'Notifications', description: 'Notification management endpoints' },
-      { name: 'Upload', description: 'File upload endpoints' },
-      { name: 'Wallet', description: 'Wallet management endpoints' }
+      { name: 'Authentication', description: 'User authentication and authorization endpoints' },
+      { name: 'Admin Authentication', description: 'Admin authentication endpoints' },
+                { name: 'User Authentication', description: 'User authentication endpoints (Registration & Login)' },
+      { name: 'Users - Admin', description: 'User management and profile operations (Admin only)' },
+      { name: 'Admin Operations', description: 'Admin-only operations and management' },
+      { name: 'Consultations - Common', description: 'Consultation booking and management (All users)' },
+      { name: 'Categories - Admin', description: 'Service category management (Admin only)' },
+      { name: 'Payments - Admin', description: 'Payment processing and management (Admin only)' },
+      { name: 'Payments - Seeker', description: 'Payment creation and management (Seekers only)' },
+      { name: 'Moyasar Payments', description: 'Moyasar payment gateway integration' },
+      { name: 'Moyasar Invoices', description: 'Moyasar invoice management' },
+      { name: 'Moyasar Customers', description: 'Moyasar customer management' },
+      { name: 'Moyasar Webhooks', description: 'Moyasar webhook handling' },
+      { name: 'Chat - Common', description: 'Real-time chat functionality (All users)' },
+      { name: 'Search - Common', description: 'Search and discovery functionality (Public)' },
+      { name: 'Notifications - Common', description: 'User notification system (All users)' },
+      { name: 'Upload - Common', description: 'File and image upload management (All users)' },
+      { name: 'Wallet - Common', description: 'Wallet and transaction management (All users)' },
+      { name: 'Reviews - Seeker', description: 'Review and rating system (Seekers only)' },
+      { name: 'Availability - Provider', description: 'Provider availability scheduling (Providers only)' },
+      { name: 'Profile - Common', description: 'User profile management (All users)' }
     ]
   },
-  apis: ['./routes/*.js', './server.js', './swagger-templates.js']
+  apis: [
+    './routes/*.js'
+  ]
 };
 
 const specs = swaggerJsdoc(options);

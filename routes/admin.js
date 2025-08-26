@@ -10,9 +10,47 @@ const Payment = require('../models/Payment');
 router.use(auth);
 router.use(isAdmin);
 
-// @route   GET /api/admin/dashboard/stats
-// @desc    Get dashboard statistics for admin
-// @access  Private/Admin
+/**
+ * @swagger
+ * /api/admin/dashboard/stats:
+ *   get:
+ *     summary: Get admin dashboard statistics
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Dashboard statistics retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     overview:
+ *                       type: object
+ *                       properties:
+ *                         totalUsers:
+ *                           type: integer
+ *                         totalProviders:
+ *                           type: integer
+ *                         totalSeekers:
+ *                           type: integer
+ *                         totalConsultations:
+ *                           type: integer
+ *                         totalRevenue:
+ *                           type: number
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
 router.get('/dashboard/stats', async (req, res) => {
   try {
     // Get user counts
@@ -63,9 +101,76 @@ router.get('/dashboard/stats', async (req, res) => {
   }
 });
 
-// @route   GET /api/admin/users
-// @desc    Get all users with pagination and filtering
-// @access  Private/Admin
+/**
+ * @swagger
+ * /api/admin/users:
+ *   get:
+ *     summary: Get all users with pagination and filtering
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of users per page
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search term for name, email, or username
+ *       - in: query
+ *         name: userType
+ *         schema:
+ *           type: string
+ *           enum: [all, admin, seeker, provider]
+ *         description: Filter by user type
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [all, verified, unverified, active, inactive]
+ *         description: Filter by user status
+ *     responses:
+ *       200:
+ *         description: Users retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/User'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     current:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     hasNext:
+ *                       type: boolean
+ *                     hasPrev:
+ *                       type: boolean
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
 router.get('/users', async (req, res) => {
   try {
     const { page = 1, limit = 10, search = '', userType = '', status = '' } = req.query;
@@ -130,9 +235,42 @@ router.get('/users', async (req, res) => {
   }
 });
 
-// @route   GET /api/admin/users/:id
-// @desc    Get user by ID
-// @access  Private/Admin
+/**
+ * @swagger
+ * /api/admin/users/{id}:
+ *   get:
+ *     summary: Get user by ID
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/users/:id', async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select('-password');
@@ -257,9 +395,49 @@ router.delete('/users/:id', async (req, res) => {
   }
 });
 
-// @route   GET /api/admin/categories
-// @desc    Get all categories with filtering
-// @access  Private/Admin
+/**
+ * @swagger
+ * /api/admin/categories:
+ *   get:
+ *     summary: Get all categories with filtering
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: parentCategory
+ *         schema:
+ *           type: string
+ *         description: Parent category ID or 'null' for root categories
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search term for category name
+ *     responses:
+ *       200:
+ *         description: Categories retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     categories:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Category'
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
 router.get('/categories', async (req, res) => {
   try {
     const { parentCategory, search = '' } = req.query;
@@ -431,9 +609,70 @@ router.delete('/categories/:id', async (req, res) => {
   }
 });
 
-// @route   GET /api/admin/consultations
-// @desc    Get all consultations with filtering
-// @access  Private/Admin
+/**
+ * @swagger
+ * /api/admin/consultations:
+ *   get:
+ *     summary: Get all consultations with filtering
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of consultations per page
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [all, pending, accepted, in-progress, completed, cancelled]
+ *         description: Filter by consultation status
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search term for consultation title
+ *     responses:
+ *       200:
+ *         description: Consultations retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Consultation'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     current:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     hasNext:
+ *                       type: boolean
+ *                     hasPrev:
+ *                       type: boolean
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
 router.get('/consultations', async (req, res) => {
   try {
     const { page = 1, limit = 10, search = '', status = '', type = '', category = '' } = req.query;
@@ -560,9 +799,70 @@ router.put('/consultations/:id', async (req, res) => {
   }
 });
 
-// @route   GET /api/admin/payments
-// @desc    Get all payments with filtering
-// @access  Private/Admin
+/**
+ * @swagger
+ * /api/admin/payments:
+ *   get:
+ *     summary: Get all payments with filtering
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of payments per page
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [all, pending, completed, failed, cancelled]
+ *         description: Filter by payment status
+ *       - in: query
+ *         name: paymentMethod
+ *         schema:
+ *           type: string
+ *         description: Filter by payment method
+ *     responses:
+ *       200:
+ *         description: Payments retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Payment'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     current:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     hasNext:
+ *                       type: boolean
+ *                     hasPrev:
+ *                       type: boolean
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
 router.get('/payments', async (req, res) => {
   try {
     const { page = 1, limit = 10, search = '', status = '', method = '' } = req.query;

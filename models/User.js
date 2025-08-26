@@ -26,7 +26,10 @@ const UserSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: [true, 'Please add a password'],
+    required: function() {
+      // Password is required only if not using social login
+      return !this.socialLogin;
+    },
     minlength: [6, 'Password must be at least 6 characters'],
     select: false
   },
@@ -112,7 +115,7 @@ const UserSchema = new mongoose.Schema({
   },
   isVerified: {
     type: Boolean,
-    default: false
+    default: true  // Set to true since email/phone verification is commented out
   },
   isActive: {
     type: Boolean,
@@ -123,6 +126,43 @@ const UserSchema = new mongoose.Schema({
   },
   resetPasswordToken: String,
   resetPasswordExpire: Date,
+  
+  // Social Login Fields
+  socialLogin: {
+    type: Boolean,
+    default: false
+  },
+  googleId: {
+    type: String,
+    sparse: true
+  },
+  facebookId: {
+    type: String,
+    sparse: true
+  },
+  appleId: {
+    type: String,
+    sparse: true
+  },
+  
+  // OTP Verification Fields - COMMENTED OUT FOR NOW
+  // phoneVerified: {
+  //   type: Boolean,
+  //   default: false
+  // },
+  // phoneOtp: {
+  //   code: String,
+  //   expiresAt: Date
+  // },
+  // emailVerified: {
+  //   type: Boolean,
+  //   default: false
+  // },
+  // emailOtp: {
+  //   code: String,
+  //   expiresAt: Date
+  // },
+  
   createdAt: {
     type: Date,
     default: Date.now

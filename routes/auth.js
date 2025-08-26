@@ -296,7 +296,7 @@ router.post('/register', [
       userType,
       phone: phone || '',
       profileImage: profileImage || '',
-      isVerified: false,
+      isVerified: true,  // Set to true since verification is commented out
       isActive: true
     };
 

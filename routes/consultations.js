@@ -5,9 +5,82 @@ const Consultation = require('../models/Consultation');
 const User = require('../models/User');
 const Category = require('../models/Category');
 
-// @route   GET /api/consultations
-// @desc    Get all consultations with filtering
-// @access  Private
+/**
+ * @swagger
+ * /api/consultations:
+ *   get:
+ *     summary: Get all consultations with filtering
+ *     tags: [Consultations - Common]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of consultations per page
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search term for title or description
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [all, pending, accepted, in-progress, completed, cancelled]
+ *         description: Filter by consultation status
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [all, video, audio, chat, in-person]
+ *         description: Filter by consultation type
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *         description: Filter by category ID
+ *     responses:
+ *       200:
+ *         description: Consultations retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     consultations:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Consultation'
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         currentPage:
+ *                           type: integer
+ *                         totalPages:
+ *                           type: integer
+ *                         totalConsultations:
+ *                           type: integer
+ *                         limit:
+ *                           type: integer
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/', auth, async (req, res) => {
   try {
     const { page = 1, limit = 10, search = '', status = '', type = '', category = '' } = req.query;
@@ -75,9 +148,84 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// @route   POST /api/consultations
-// @desc    Create a new consultation
-// @access  Private (Seekers only)
+/**
+ * @swagger
+ * /api/consultations:
+ *   post:
+ *     summary: Create a new consultation
+ *     tags: [Consultations - Common]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - providerId
+ *               - categoryId
+ *               - title
+ *               - description
+ *               - scheduledDate
+ *               - duration
+ *               - price
+ *             properties:
+ *               providerId:
+ *                 type: string
+ *                 description: ID of the provider
+ *               categoryId:
+ *                 type: string
+ *                 description: ID of the service category
+ *               title:
+ *                 type: string
+ *                 description: Consultation title
+ *               description:
+ *                 type: string
+ *                 description: Consultation description
+ *               consultationType:
+ *                 type: string
+ *                 enum: [video, audio, chat, in-person]
+ *                 description: Type of consultation
+ *               scheduledDate:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Scheduled date and time
+ *               duration:
+ *                 type: integer
+ *                 description: Duration in minutes
+ *               price:
+ *                 type: number
+ *                 description: Consultation price
+ *               location:
+ *                 type: string
+ *                 description: Consultation location (optional)
+ *               notes:
+ *                 type: string
+ *                 description: Additional notes (optional)
+ *     responses:
+ *       201:
+ *         description: Consultation created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   $ref: '#/components/schemas/Consultation'
+ *       400:
+ *         description: Bad request - Missing required fields
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Seeker access required
+ *       500:
+ *         description: Server error
+ */
 router.post('/', auth, isSeeker, async (req, res) => {
   try {
     const {

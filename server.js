@@ -80,6 +80,9 @@ app.get('/health', (req, res) => {
 
 // API routes (to be implemented)
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/admin/auth', require('./routes/adminAuth'));
+app.use('/api/user/auth', require('./routes/userAuth'));
+app.use('/api/moyasar', require('./routes/moyasarPayments'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/consultations', require('./routes/consultations'));
@@ -92,6 +95,9 @@ app.use('/api/chat', require('./routes/chat'));
 app.use('/api/search', require('./routes/search'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/wallet', require('./routes/wallet'));
+app.use('/api/reviews', require('./routes/reviews'));
+app.use('/api/availability', require('./routes/availability'));
+app.use('/api/profile', require('./routes/profile'));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
