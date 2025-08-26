@@ -27,14 +27,15 @@ const User = require('../models/User');
  *     RegisterRequest:
  *       type: object
  *       required:
- *         - name
+ *         - username
  *         - email
  *         - password
  *         - userType
+ *         - phone
  *       properties:
- *         name:
+ *         username:
  *           type: string
- *           description: User's full name
+ *           description: User's unique username
  *         email:
  *           type: string
  *           format: email
@@ -263,10 +264,11 @@ router.post('/create-admin', [
 // @desc    Register a new user
 // @access  Public
 router.post('/register', [
-  body('name', 'Name is required').notEmpty(),
+  body('username', 'Username is required').notEmpty(),
   body('email', 'Please include a valid email').isEmail(),
   body('password', 'Please enter a password with 6 or more characters').isLength({ min: 6 }),
-  body('userType', 'UserType is required').isIn(['seeker', 'provider'])
+  body('userType', 'UserType is required').isIn(['seeker', 'provider']),
+  body('phone', 'Phone number is required').notEmpty()
 ], async (req, res) => {
   try {
     // Check for validation errors
@@ -275,24 +277,21 @@ router.post('/register', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, email, password, userType, phone, profileImage } = req.body;
+    const { username, email, password, userType, phone, profileImage } = req.body;
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ 
+      $or: [{ email }, { phone }, { username }] 
+    });
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(400).json({ message: 'User with this email, phone, or username already exists' });
     }
 
-    // Hash password
-    const salt = await bcrypt.genSalt(12);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Create user object
+    // Create user object (password will be hashed by User model pre-save hook)
     const userFields = {
-      fullname: name,
-      username: email.split('@')[0], // Generate username from email
+      username,
       email,
-      password: hashedPassword,
+      password,  // Plain password - will be hashed by User model
       userType,
       phone: phone || '',
       profileImage: profileImage || '',
@@ -323,7 +322,7 @@ router.post('/register', [
       token,
       user: {
         id: user._id,
-        name: user.fullname,
+        username: user.username,
         email: user.email,
         userType: user.userType
       }

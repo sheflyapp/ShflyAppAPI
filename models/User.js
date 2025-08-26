@@ -2,11 +2,6 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const UserSchema = new mongoose.Schema({
-  fullname: {
-    type: String,
-    trim: true,
-    maxlength: [100, 'Full name cannot be more than 100 characters']
-  },
   username: {
     type: String,
     required: [true, 'Please add a username'],
@@ -14,6 +9,11 @@ const UserSchema = new mongoose.Schema({
     trim: true,
     maxlength: [50, 'Username cannot be more than 50 characters'],
     match: [/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores']
+  },
+  fullname: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Full name cannot be more than 100 characters']
   },
   email: {
     type: String,

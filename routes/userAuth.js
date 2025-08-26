@@ -27,15 +27,15 @@ const User = require('../models/User');
  *     UserRegisterRequest:
  *       type: object
  *       required:
- *         - fullname
+ *         - username
  *         - email
  *         - password
  *         - userType
  *         - phone
  *       properties:
- *         fullname:
+ *         username:
  *           type: string
- *           description: User's full name
+ *           description: User's unique username
  *         email:
  *           type: string
  *           format: email
@@ -51,6 +51,9 @@ const User = require('../models/User');
  *         phone:
  *           type: string
  *           description: User's phone number
+ *         fullname:
+ *           type: string
+ *           description: User's full name (optional)
  *         profileImage:
  *           type: string
  *           description: URL to user's profile image
@@ -176,9 +179,9 @@ const User = require('../models/User');
  *             id:
  *               type: string
  *               description: User ID
- *             fullname:
+ *             username:
  *               type: string
- *               description: User's full name
+ *               description: User's username
  *             email:
  *               type: string
  *               description: User's email
@@ -224,7 +227,7 @@ const User = require('../models/User');
  *               $ref: '#/components/schemas/Error'
  */
 router.post('/register', [
-  body('fullname', 'Full name is required').notEmpty(),
+  body('username', 'Username is required').notEmpty(),
   body('email', 'Please include a valid email').isEmail(),
   body('password', 'Please enter a password with 6 or more characters').isLength({ min: 6 }),
   body('userType', 'UserType is required').isIn(['seeker', 'provider']),
@@ -237,26 +240,21 @@ router.post('/register', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { fullname, email, password, userType, phone, profileImage, country, city, gender } = req.body;
+    const { username, email, password, userType, phone, profileImage, country, city, gender } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ 
-      $or: [{ email }, { phone }] 
+      $or: [{ email }, { phone }, { username }] 
     });
     if (existingUser) {
-      return res.status(400).json({ message: 'User with this email or phone already exists' });
+      return res.status(400).json({ message: 'User with this email, phone, or username already exists' });
     }
 
-    // Hash password
-    const salt = await bcrypt.genSalt(12);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Create user object
+    // Create user object (password will be hashed by User model pre-save hook)
     const userFields = {
-      fullname,
-      username: email.split('@')[0], // Generate username from email
+      username,
       email,
-      password: hashedPassword,
+      password,  // Plain password - will be hashed by User model
       userType,
       phone,
       profileImage: profileImage || '',
@@ -291,7 +289,7 @@ router.post('/register', [
       token,
       user: {
         id: user._id,
-        fullname: user.fullname,
+        username: user.username,
         email: user.email,
         userType: user.userType,
         phone: user.phone
@@ -391,7 +389,7 @@ router.post('/login', [
       token,
       user: {
         id: user._id,
-        fullname: user.fullname,
+        username: user.username,
         email: user.email,
         userType: user.userType,
         phone: user.phone
@@ -498,7 +496,7 @@ router.post('/google', [
       token,
       user: {
         id: user._id,
-        fullname: user.fullname,
+        username: user.username,
         email: user.email,
         userType: user.userType,
         phone: user.phone
@@ -605,7 +603,7 @@ router.post('/facebook', [
       token,
       user: {
         id: user._id,
-        fullname: user.fullname,
+        username: user.username,
         email: user.email,
         userType: user.userType,
         phone: user.phone
@@ -712,7 +710,7 @@ router.post('/apple', [
       token,
       user: {
         id: user._id,
-        fullname: user.fullname,
+        username: user.username,
         email: user.email,
         userType: user.userType,
         phone: user.phone
