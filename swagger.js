@@ -18,7 +18,7 @@ const options = {
         description: 'Development server'
       },
       {
-        url: 'https://api.shfly.com',
+        url: 'https://shflyappapi.onrender.com',
         description: 'Production server'
       }
     ],
