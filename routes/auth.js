@@ -51,9 +51,6 @@ const User = require('../models/User');
  *         phone:
  *           type: string
  *           description: User's phone number
- *         profileImage:
- *           type: string
- *           description: URL to user's profile image
  *     CreateAdminRequest:
  *       type: object
  *       required:
@@ -277,7 +274,7 @@ router.post('/register', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { username, email, password, userType, phone, profileImage } = req.body;
+    const { username, email, password, userType, phone } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ 
@@ -294,7 +291,6 @@ router.post('/register', [
       password,  // Plain password - will be hashed by User model
       userType,
       phone: phone || '',
-      profileImage: profileImage || '',
       isVerified: true,  // Set to true since verification is commented out
       isActive: true
     };
@@ -318,13 +314,14 @@ router.post('/register', [
     );
 
     res.json({
-      message: 'User registered successfully',
+      message: 'User Registered Successfully',
       token,
       user: {
         id: user._id,
         username: user.username,
         email: user.email,
-        userType: user.userType
+        userType: user.userType,
+        phone: user.phone
       }
     });
 
@@ -386,18 +383,18 @@ router.post('/login', [
     // Check if user exists and include password for comparison
     const user = await User.findOne({ email }).select('+password');
     if (!user) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Invalid Credentials' });
     }
 
     // Check if user is active
     if (!user.isActive) {
-      return res.status(400).json({ message: 'Account is deactivated' });
+      return res.status(400).json({ message: 'Account is Deactivated' });
     }
 
     // Verify password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Invalid Credentials' });
     }
 
     // Update last login
@@ -420,13 +417,15 @@ router.post('/login', [
     );
 
     res.json({
-      message: 'Login successful',
+      message: 'Login Successful',
       token,
       user: {
         id: user._id,
         name: user.fullname,
+        username: user.username,
         email: user.email,
-        userType: user.userType
+        userType: user.userType,
+        phone: user?.phone || ""
       }
     });
 

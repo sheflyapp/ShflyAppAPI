@@ -54,9 +54,6 @@ const User = require('../models/User');
  *         fullname:
  *           type: string
  *           description: User's full name (optional)
- *         profileImage:
- *           type: string
- *           description: URL to user's profile image
  *         country:
  *           type: string
  *           description: User's country
@@ -84,9 +81,6 @@ const User = require('../models/User');
  *         fullname:
  *           type: string
  *           description: User's full name from Google
- *         profileImage:
- *           type: string
- *           description: Profile image URL from Google
  *         userType:
  *           type: string
  *           enum: [seeker, provider]
@@ -108,9 +102,6 @@ const User = require('../models/User');
  *         fullname:
  *           type: string
  *           description: User's full name from Facebook
- *         profileImage:
- *           type: string
- *           description: Profile image URL from Facebook
  *         userType:
  *           type: string
  *           enum: [seeker, provider]
