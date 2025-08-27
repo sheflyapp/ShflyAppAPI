@@ -9,8 +9,7 @@
     "test": "jest",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "create-admin": "node scripts/createAdminDirect.js",
-    "test-cloudinary": "node scripts/testCloudinary.js"
+    "create-admin": "node scripts/createAdminDirect.js"
   },
   "keywords": [
     "consultation",

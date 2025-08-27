@@ -37,3 +37,4 @@ async function testCloudinary() {
 
 // Run the test
 testCloudinary();
+
