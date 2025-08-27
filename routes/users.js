@@ -40,10 +40,10 @@ const User = require('../models/User');
  *       properties:
  *         page:
  *           type: number
- *           description: Page number (default: 1)
+ *           description: Page number, default is 1
  *         limit:
  *           type: number
- *           description: Number of users per page (default: 10)
+ *           description: Number of users per page, default is 10
  *         search:
  *           type: string
  *           description: Search term for name, email, or username
@@ -194,7 +194,7 @@ router.get('/', auth, isAdmin, async (req, res) => {
  * /api/users/{id}:
  *   get:
  *     summary: Get user by ID
- *     description: Get user profile by ID (admin or own profile only)
+ *     description: Get user profile by ID, admin or own profile only
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []

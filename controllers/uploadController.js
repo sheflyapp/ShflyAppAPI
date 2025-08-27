@@ -7,7 +7,7 @@ const User = require('../models/User');
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
-    folder: process.env.CLOUDINARY_FOLDER || 'shfly-app-uploads',
+    folder: process.env.CLOUDINARY_FOLDER || 'shflyapp_images',
     allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx'],
     transformation: [
       { width: 1000, height: 1000, crop: 'limit' }, // Limit image dimensions
