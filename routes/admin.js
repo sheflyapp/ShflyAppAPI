@@ -401,6 +401,53 @@ router.delete('/users/:id', async (req, res) => {
   }
 });
 
+// @route   POST /api/admin/users
+// @desc    Create new user
+// @access  Private/Admin
+router.post('/users', async (req, res) => {
+  try {
+    const { username, email, password, userType, phone, fullname } = req.body;
+    
+    // Check if user already exists
+    const existingUser = await User.findOne({ 
+      $or: [{ email }, { username }] 
+    });
+    
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: existingUser.email === email ? 'Email already exists' : 'Username already exists'
+      });
+    }
+    
+    // Create new user
+    const user = new User({
+      username,
+      email,
+      password,
+      userType,
+      phone: phone || '',
+      fullname: fullname || username,
+      isVerified: true,
+      isActive: true
+    });
+    
+    await user.save();
+    
+    res.status(201).json({
+      success: true,
+      message: 'User created successfully',
+      data: { user: user.toObject({ hide: 'password' }) }
+    });
+  } catch (error) {
+    console.error('Create user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating user'
+    });
+  }
+});
+
 /**
  * @swagger
  * /api/admin/categories:
@@ -487,12 +534,20 @@ router.post('/categories', async (req, res) => {
   try {
     const { name, description, parentCategory, icon, color, isActive, featured, sortOrder } = req.body;
     
+    // Validate required fields
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Category name is required'
+      });
+    }
+    
     // Convert empty string to null for parentCategory
     const parentCat = parentCategory === '' ? null : parentCategory;
     
     const category = new Category({
-      name,
-      description,
+      name: name.trim(),
+      description: description.trim(),
       parentCategory: parentCat,
       icon,
       color,
@@ -545,8 +600,18 @@ router.put('/categories/:id', async (req, res) => {
     const parentCat = parentCategory === '' ? null : parentCategory;
     
     // Update category fields
-    if (name) category.name = name;
-    if (description !== undefined) category.description = description;
+    if (name !== undefined) {
+      if (!name || !name.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Category name cannot be empty'
+        });
+      }
+      category.name = name.trim();
+    }
+    if (description !== undefined) {
+      category.description = description.trim();
+    }
     if (parentCategory !== undefined) category.parentCategory = parentCat;
     if (icon !== undefined) category.icon = icon;
     if (color !== undefined) category.color = color;
@@ -805,6 +870,66 @@ router.put('/consultations/:id', async (req, res) => {
   }
 });
 
+// @route   PUT /api/admin/consultations/:id/status
+// @desc    Update consultation status
+// @access  Private/Admin
+router.put('/consultations/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body;
+    
+    const consultation = await Consultation.findById(req.params.id);
+    if (!consultation) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Consultation not found' 
+      });
+    }
+    
+    consultation.status = status;
+    await consultation.save();
+    
+    res.json({
+      success: true,
+      message: 'Consultation status updated successfully',
+      data: { consultation }
+    });
+  } catch (error) {
+    console.error('Update consultation status error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error updating consultation status' 
+    });
+  }
+});
+
+// @route   DELETE /api/admin/consultations/:id
+// @desc    Delete consultation
+// @access  Private/Admin
+router.delete('/consultations/:id', async (req, res) => {
+  try {
+    const consultation = await Consultation.findById(req.params.id);
+    if (!consultation) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Consultation not found' 
+      });
+    }
+    
+    await Consultation.findByIdAndDelete(req.params.id);
+    
+    res.json({
+      success: true,
+      message: 'Consultation deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete consultation error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error deleting consultation' 
+    });
+  }
+});
+
 /**
  * @swagger
  * /api/admin/payments:
@@ -988,6 +1113,74 @@ router.put('/payments/:id', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Error updating payment' 
+    });
+  }
+});
+
+// @route   PUT /api/admin/payments/:id/refund
+// @desc    Refund payment
+// @access  Private/Admin
+router.put('/payments/:id/refund', async (req, res) => {
+  try {
+    const payment = await Payment.findById(req.params.id);
+    if (!payment) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Payment not found' 
+      });
+    }
+    
+    if (payment.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only completed payments can be refunded'
+      });
+    }
+    
+    payment.status = 'refunded';
+    payment.refundedAt = new Date();
+    payment.refundAmount = payment.amount;
+    
+    await payment.save();
+    
+    res.json({
+      success: true,
+      message: 'Payment refunded successfully',
+      data: { payment }
+    });
+  } catch (error) {
+    console.error('Refund payment error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error refunding payment' 
+    });
+  }
+});
+
+// @route   DELETE /api/admin/payments/:id
+// @desc    Delete payment
+// @access  Private/Admin
+router.delete('/payments/:id', async (req, res) => {
+  try {
+    const payment = await Payment.findById(req.params.id);
+    if (!payment) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Payment not found' 
+      });
+    }
+    
+    await Payment.findByIdAndDelete(req.params.id);
+    
+    res.json({
+      success: true,
+      message: 'Payment deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete payment error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error deleting payment' 
     });
   }
 });
