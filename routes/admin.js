@@ -40,6 +40,8 @@ router.use(isAdmin);
  *                           type: integer
  *                         totalSeekers:
  *                           type: integer
+ *                         totalCategories:
+ *                           type: integer
  *                         totalConsultations:
  *                           type: integer
  *                         totalRevenue:
@@ -57,6 +59,9 @@ router.get('/dashboard/stats', async (req, res) => {
     const totalUsers = await User.countDocuments();
     const totalProviders = await User.countDocuments({ userType: 'provider' });
     const totalSeekers = await User.countDocuments({ userType: 'seeker' });
+    
+    // Get categories count
+    const totalCategories = await Category.countDocuments();
     
     // Get consultation count
     const totalConsultations = await Consultation.countDocuments();
@@ -84,6 +89,7 @@ router.get('/dashboard/stats', async (req, res) => {
           totalUsers,
           totalProviders,
           totalSeekers,
+          totalCategories,
           totalConsultations,
           totalRevenue: revenue
         },
