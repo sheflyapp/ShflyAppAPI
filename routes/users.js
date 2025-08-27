@@ -35,7 +35,26 @@ const User = require('../models/User');
  *                 limit:
  *                   type: number
  *                   description: Number of users per page
-
+ *     UserQueryParams:
+ *       type: object
+ *       properties:
+ *         page:
+ *           type: number
+ *           description: Page number (default: 1)
+ *         limit:
+ *           type: number
+ *           description: Number of users per page (default: 10)
+ *         search:
+ *           type: string
+ *           description: Search term for name, email, or username
+ *         userType:
+ *           type: string
+ *           enum: [all, admin, seeker, provider]
+ *           description: Filter by user type
+ *         status:
+ *           type: string
+ *           enum: [all, verified, unverified, active, inactive]
+ *           description: Filter by user status
  */
 
 /**

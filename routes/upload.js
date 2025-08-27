@@ -1,68 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../uploads');
-    
-    // Create uploads directory if it doesn't exist
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    
-    // Create subdirectories for different file types
-    let subDir = 'general';
-    if (file.fieldname === 'profileImage') subDir = 'profiles';
-    else if (file.fieldname === 'document') subDir = 'documents';
-    else if (file.fieldname === 'chatImage') subDir = 'chat';
-    
-    const finalDir = path.join(uploadDir, subDir);
-    if (!fs.existsSync(finalDir)) {
-      fs.mkdirSync(finalDir, { recursive: true });
-    }
-    
-    cb(null, finalDir);
-  },
-  filename: (req, file, cb) => {
-    // Generate unique filename
-    const uniqueName = `${uuidv4()}-${Date.now()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
-  }
-});
-
-// File filter function
-const fileFilter = (req, file, cb) => {
-  // Allow images
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  }
-  // Allow documents
-  else if (file.mimetype === 'application/pdf' || 
-           file.mimetype === 'application/msword' ||
-           file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-    cb(null, true);
-  }
-  // Reject other file types
-  else {
-    cb(new Error('Invalid file type. Only images and documents are allowed.'), false);
-  }
-};
-
-// Configure multer
-const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-    files: 5 // Maximum 5 files at once
-  }
-});
+const { upload } = require('../controllers/uploadController');
 
 /**
  * @swagger
@@ -495,6 +434,74 @@ router.delete('/:filename', auth, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/upload/optimize-image:
+ *   get:
+ *     summary: Get optimized image URL
+ *     tags: [Upload]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: publicId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Cloudinary public ID of the image
+ *       - in: query
+ *         name: width
+ *         required: false
+ *         schema:
+ *           type: integer
+ *         description: Desired width of the image
+ *       - in: query
+ *         name: height
+ *         required: false
+ *         schema:
+ *           type: integer
+ *         description: Desired height of the image
+ *       - in: query
+ *         name: quality
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Quality of the image (auto, auto:good, auto:best, etc.)
+ *     responses:
+ *       200:
+ *         description: Optimized image URL generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 optimizedUrl:
+ *                   type: string
+ *                   description: Optimized image URL
+ *                 publicId:
+ *                   type: string
+ *                   description: Cloudinary public ID
+ *                 transformations:
+ *                   type: array
+ *                   description: Applied transformations
+ *       400:
+ *         description: Bad request
+ *       500:
+ *         description: Server error
+ */
+router.get('/optimize-image', auth, async (req, res) => {
+  try {
+    const { getOptimizedImageUrl } = require('../controllers/uploadController');
+    await getOptimizedImageUrl(req, res);
+  } catch (error) {
+    console.error('Error optimizing image:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Server error'
+    });
+  }
+});
+
 // Error handling middleware for multer
 router.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
@@ -514,7 +521,7 @@ router.use((error, req, res, next) => {
   
   res.status(500).json({
     success: false,
-    message: error.message || 'Upload error'
+        message: error.message || 'Upload error'
   });
 });
 

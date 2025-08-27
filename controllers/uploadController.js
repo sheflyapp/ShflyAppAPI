@@ -1,24 +1,18 @@
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('../config/cloudinary');
+const User = require('../models/User');
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = 'uploads/';
-    
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    // Generate unique filename
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+// Configure Cloudinary storage for multer
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: process.env.CLOUDINARY_FOLDER || 'shfly-app-uploads',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx'],
+    transformation: [
+      { width: 1000, height: 1000, crop: 'limit' }, // Limit image dimensions
+      { quality: 'auto:good' } // Optimize quality
+    ]
   }
 });
 
@@ -42,12 +36,12 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Configure multer
+// Configure multer with Cloudinary storage
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 10 * 1024 * 1024, // 10MB limit (Cloudinary supports larger files)
     files: 1 // Only 1 file at a time
   }
 });
@@ -66,22 +60,29 @@ const uploadProfileImage = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Delete old profile image if exists
+    // Delete old profile image from Cloudinary if exists
     if (user.profileImage && user.profileImage !== '') {
-      const oldImagePath = path.join(__dirname, '..', user.profileImage);
-      if (fs.existsSync(oldImagePath)) {
-        fs.unlinkSync(oldImagePath);
+      try {
+        // Extract public_id from the old image URL
+        const oldImageUrl = user.profileImage;
+        if (oldImageUrl.includes('cloudinary.com')) {
+          const publicId = oldImageUrl.split('/').pop().split('.')[0];
+          await cloudinary.uploader.destroy(publicId);
+        }
+      } catch (deleteError) {
+        console.log('Could not delete old image:', deleteError.message);
       }
     }
 
-    // Update user profile image
-    const imageUrl = `/uploads/${req.file.filename}`;
+    // Update user profile image with Cloudinary URL
+    const imageUrl = req.file.path; // Cloudinary URL
     user.profileImage = imageUrl;
     await user.save();
 
     res.json({
       message: 'Profile image uploaded successfully',
-      imageUrl: imageUrl
+      imageUrl: imageUrl,
+      publicId: req.file.filename // Cloudinary public_id
     });
   } catch (error) {
     console.error('Upload profile image error:', error);
@@ -113,12 +114,14 @@ const uploadDocument = async (req, res) => {
     }
 
     const document = {
-      filename: req.file.filename,
+      filename: req.file.filename, // Cloudinary public_id
       originalName: req.file.originalname,
-      path: `/uploads/${req.file.filename}`,
+      path: req.file.path, // Cloudinary URL
       documentType,
       description: description || '',
-      uploadedAt: new Date()
+      uploadedAt: new Date(),
+      cloudinaryUrl: req.file.path,
+      publicId: req.file.filename
     };
 
     // Add document to user
@@ -176,10 +179,13 @@ const deleteDocument = async (req, res) => {
       return res.status(404).json({ message: 'Document not found' });
     }
 
-    // Delete file from filesystem
-    const filePath = path.join(__dirname, '..', document.path);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    // Delete file from Cloudinary
+    try {
+      if (document.publicId) {
+        await cloudinary.uploader.destroy(document.publicId);
+      }
+    } catch (deleteError) {
+      console.log('Could not delete from Cloudinary:', deleteError.message);
     }
 
     // Remove document from user
@@ -195,7 +201,7 @@ const deleteDocument = async (req, res) => {
   }
 };
 
-// Download document
+// Download document (redirect to Cloudinary URL)
 const downloadDocument = async (req, res) => {
   try {
     const { filename } = req.params;
@@ -212,19 +218,8 @@ const downloadDocument = async (req, res) => {
       return res.status(404).json({ message: 'Document not found' });
     }
 
-    const filePath = path.join(__dirname, '..', document.path);
-    
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ message: 'File not found' });
-    }
-
-    // Set headers for download
-    res.setHeader('Content-Disposition', `attachment; filename="${document.originalName}"`);
-    res.setHeader('Content-Type', 'application/octet-stream');
-
-    // Stream file
-    const fileStream = fs.createReadStream(filePath);
-    fileStream.pipe(res);
+    // Redirect to Cloudinary URL for download
+    res.redirect(document.path);
   } catch (error) {
     console.error('Download document error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -256,6 +251,39 @@ const getFileInfo = async (req, res) => {
   }
 };
 
+// Get optimized image URL (for different sizes)
+const getOptimizedImageUrl = async (req, res) => {
+  try {
+    const { publicId, width, height, quality } = req.query;
+    
+    if (!publicId) {
+      return res.status(400).json({ message: 'Public ID is required' });
+    }
+
+    const transformation = [];
+    
+    if (width) transformation.push({ width: parseInt(width) });
+    if (height) transformation.push({ height: parseInt(height) });
+    if (quality) transformation.push({ quality: quality });
+    
+    // Add default transformations
+    transformation.push({ crop: 'fill' });
+    
+    const optimizedUrl = cloudinary.url(publicId, {
+      transformation: transformation
+    });
+
+    res.json({
+      optimizedUrl,
+      publicId,
+      transformations: transformation
+    });
+  } catch (error) {
+    console.error('Get optimized image URL error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   upload,
   uploadProfileImage,
@@ -263,5 +291,6 @@ module.exports = {
   getUserDocuments,
   deleteDocument,
   downloadDocument,
-  getFileInfo
+  getFileInfo,
+  getOptimizedImageUrl
 };

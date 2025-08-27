@@ -48,6 +48,22 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  documents: [{
+    filename: String,        // Cloudinary public_id
+    originalName: String,    // Original filename
+    path: String,           // Cloudinary URL
+    documentType: {
+      type: String,
+      enum: ['certificate', 'license', 'degree', 'id_proof', 'other']
+    },
+    description: String,
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    },
+    cloudinaryUrl: String,  // Cloudinary URL (redundant but useful)
+    publicId: String        // Cloudinary public_id (redundant but useful)
+  }],
   bio: {
     type: String,
     maxlength: [500, 'Bio cannot be more than 500 characters']
