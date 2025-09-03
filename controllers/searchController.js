@@ -23,16 +23,16 @@ const searchProviders = async (req, res) => {
     } = req.query;
 
     let filter = { 
-      userType: 'provider', 
-      isActive: true, 
-      isVerified: true 
+      userType: 'provider',
+      isActive: true,
+      isVerified: true
     };
 
     // Text search
     if (query) {
       filter.$or = [
         { fullname: { $regex: query, $options: 'i' } },
-        { specialization: { $regex: query, $options: 'i' } },
+        { username: { $regex: query, $options: 'i' } },
         { bio: { $regex: query, $options: 'i' } }
       ];
     }
@@ -44,7 +44,7 @@ const searchProviders = async (req, res) => {
 
     // Specialization filter
     if (specialization) {
-      filter.specialization = { $regex: specialization, $options: 'i' };
+      filter.specialization = specialization;
     }
 
     // Rating filter
@@ -97,7 +97,7 @@ const searchProviders = async (req, res) => {
     }
 
     const providers = await User.find(filter)
-      .select('fullname specialization price rating totalReviews country city bio profileImage availability chat call video')
+      .select('fullname username specialization price rating totalReviews country city bio profileImage availability chat call video')
       .sort(sort)
       .limit(limit * 1)
       .skip((page - 1) * limit);

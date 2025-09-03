@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
+const User = require('../models/User');
+const Consultation = require('../models/Consultation');
+const Category = require('../models/Category');
 const {
   searchProviders,
   getProviderRecommendations,
@@ -95,7 +98,6 @@ router.get('/', async (req, res) => {
         $or: [
           { fullname: searchQuery },
           { username: searchQuery },
-          { specialization: searchQuery },
           { bio: searchQuery }
         ]
       })
@@ -111,7 +113,6 @@ router.get('/', async (req, res) => {
         $or: [
           { fullname: searchQuery },
           { username: searchQuery },
-          { specialization: searchQuery },
           { bio: searchQuery }
         ]
       });
