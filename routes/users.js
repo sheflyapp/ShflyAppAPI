@@ -59,6 +59,111 @@ const User = require('../models/User');
 
 /**
  * @swagger
+ * /api/users/public:
+ *   get:
+ *     summary: Get all users except admins (Public)
+ *     description: Retrieve list of all users except admins - accessible to all users
+ *     tags: [Users]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: number
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: number
+ *           default: 10
+ *         description: Number of users per page
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search term for name, email, or username
+ *       - in: query
+ *         name: userType
+ *         schema:
+ *           type: string
+ *           enum: [all, seeker, provider]
+ *           default: all
+ *         description: Filter by user type (excludes admin)
+ *     responses:
+ *       200:
+ *         description: Users retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PublicUsersResponse'
+ *       500:
+ *         description: Internal server error
+ */
+// @route   GET /api/users/public
+// @desc    Get all users except admins (public access)
+// @access  Public
+router.get('/public', async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search = '', userType = 'all' } = req.query;
+    const skip = (page - 1) * limit;
+    
+    // Build filter object - exclude admins
+    const filter = { userType: { $ne: 'admin' } };
+    
+    // Add userType filter if specified
+    if (userType && userType !== 'all') {
+      filter.userType = userType;
+    }
+    
+    // Build search query
+    let searchQuery = {};
+    if (search) {
+      searchQuery = {
+        $or: [
+          { fullname: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+          { username: { $regex: search, $options: 'i' } }
+        ]
+      };
+    }
+    
+    // Combine filters
+    const finalFilter = { ...filter, ...searchQuery };
+    
+    // Get users with pagination
+    const users = await User.find(finalFilter)
+      .select('-password -resetPasswordToken -resetPasswordExpire')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+    
+    // Get total count for pagination
+    const totalUsers = await User.countDocuments(finalFilter);
+    const totalPages = Math.ceil(totalUsers / limit);
+    
+    res.json({
+      success: true,
+      data: {
+        users,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages,
+          totalUsers,
+          limit: parseInt(limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get public users error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error fetching users' 
+    });
+  }
+});
+
+/**
+ * @swagger
  * /api/users:
  *   get:
  *     summary: Get all users (Admin only)

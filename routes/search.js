@@ -1,9 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
-const User = require('../models/User');
-const Consultation = require('../models/Consultation');
-const Category = require('../models/Category');
+const {
+  searchProviders,
+  getProviderRecommendations,
+  searchConsultations,
+  getSearchSuggestions,
+  getTrendingSearches,
+  advancedProviderSearch
+} = require('../controllers/searchController');
 
 /**
  * @swagger
@@ -284,112 +289,7 @@ router.get('/', async (req, res) => {
  *       500:
  *         description: Server error
  */
-router.get('/providers', async (req, res) => {
-  try {
-    const {
-      q,
-      category,
-      country,
-      city,
-      minRating,
-      maxPrice,
-      availability,
-      sortBy = 'rating',
-      page = 1,
-      limit = 10
-    } = req.query;
-
-    const filter = {
-      userType: 'provider',
-      isActive: true,
-      isVerified: true
-    };
-
-    // Text search
-    if (q) {
-      filter.$or = [
-        { fullname: { $regex: q, $options: 'i' } },
-        { username: { $regex: q, $options: 'i' } },
-        { bio: { $regex: q, $options: 'i' } }
-      ];
-    }
-
-    // Category filter
-    if (category) {
-      filter.specialization = category;
-    }
-
-    // Location filters
-    if (country) {
-      filter.country = { $regex: country, $options: 'i' };
-    }
-    if (city) {
-      filter.city = { $regex: city, $options: 'i' };
-    }
-
-    // Rating filter
-    if (minRating) {
-      filter.rating = { $gte: parseFloat(minRating) };
-    }
-
-    // Price filter
-    if (maxPrice) {
-      filter.price = { $lte: parseFloat(maxPrice) };
-    }
-
-    // Availability filter
-    if (availability) {
-      filter[`availability.${availability}`] = true;
-    }
-
-    // Sort options
-    let sort = {};
-    switch (sortBy) {
-      case 'rating':
-        sort = { rating: -1, totalReviews: -1 };
-        break;
-      case 'price':
-        sort = { price: 1 };
-        break;
-      case 'name':
-        sort = { fullname: 1 };
-        break;
-      case 'newest':
-        sort = { createdAt: -1 };
-        break;
-      default:
-        sort = { rating: -1 };
-    }
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const providers = await User.find(filter)
-      .populate('specialization', 'name icon')
-      .select('-password -resetPasswordToken -resetPasswordExpire')
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    const total = await User.countDocuments(filter);
-
-    res.json({
-      success: true,
-      data: providers,
-      pagination: {
-        current: parseInt(page),
-        total: Math.ceil(total / parseInt(limit)),
-        hasNext: parseInt(page) * parseInt(limit) < total,
-        hasPrev: parseInt(page) > 1
-      }
-    });
-  } catch (error) {
-    console.error('Error in provider search:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-});
+router.get('/providers', searchProviders);
 
 /**
  * @swagger
@@ -455,75 +355,7 @@ router.get('/providers', async (req, res) => {
  *       500:
  *         description: Server error
  */
-router.get('/consultations', async (req, res) => {
-  try {
-    const {
-      q,
-      category,
-      status,
-      minPrice,
-      maxPrice,
-      page = 1,
-      limit = 10
-    } = req.query;
-
-    const filter = {};
-
-    // Text search
-    if (q) {
-      filter.$or = [
-        { title: { $regex: q, $options: 'i' } },
-        { description: { $regex: q, $options: 'i' } }
-      ];
-    }
-
-    // Category filter
-    if (category) {
-      filter.category = category;
-    }
-
-    // Status filter
-    if (status) {
-      filter.status = status;
-    }
-
-    // Price filters
-    if (minPrice || maxPrice) {
-      filter.price = {};
-      if (minPrice) filter.price.$gte = parseFloat(minPrice);
-      if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
-    }
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const consultations = await Consultation.find(filter)
-      .populate('seeker', 'fullname username profileImage')
-      .populate('provider', 'fullname username profileImage')
-      .populate('category', 'name icon')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    const total = await Consultation.countDocuments(filter);
-
-    res.json({
-      success: true,
-      data: consultations,
-      pagination: {
-        current: parseInt(page),
-        total: Math.ceil(total / parseInt(limit)),
-        hasNext: parseInt(page) * parseInt(limit) < total,
-        hasPrev: parseInt(page) > 1
-      }
-    });
-  } catch (error) {
-    console.error('Error in consultation search:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-});
+router.get('/consultations', auth, searchConsultations);
 
 /**
  * @swagger
@@ -622,5 +454,181 @@ router.get('/categories', async (req, res) => {
     });
   }
 });
+
+/**
+ * @swagger
+ * /api/search/suggestions:
+ *   get:
+ *     summary: Get search suggestions
+ *     tags: [Search]
+ *     parameters:
+ *       - in: query
+ *         name: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Search query
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [providers, specializations, categories]
+ *           default: providers
+ *         description: Type of suggestions
+ *     responses:
+ *       200:
+ *         description: Search suggestions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 suggestions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       type:
+ *                         type: string
+ *                       id:
+ *                         type: string
+ *                       text:
+ *                         type: string
+ *                       subtitle:
+ *                         type: string
+ *       500:
+ *         description: Server error
+ */
+router.get('/suggestions', getSearchSuggestions);
+
+/**
+ * @swagger
+ * /api/search/trending:
+ *   get:
+ *     summary: Get trending searches
+ *     tags: [Search]
+ *     responses:
+ *       200:
+ *         description: Trending searches
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 trendingSpecializations:
+ *                   type: array
+ *                 trendingCategories:
+ *                   type: array
+ *       500:
+ *         description: Server error
+ */
+router.get('/trending', getTrendingSearches);
+
+/**
+ * @swagger
+ * /api/search/recommendations:
+ *   get:
+ *     summary: Get provider recommendations for user
+ *     tags: [Search]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of recommendations
+ *     responses:
+ *       200:
+ *         description: Provider recommendations
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 recommendations:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.get('/recommendations', auth, getProviderRecommendations);
+
+/**
+ * @swagger
+ * /api/search/advanced:
+ *   get:
+ *     summary: Advanced provider search with geolocation
+ *     tags: [Search]
+ *     parameters:
+ *       - in: query
+ *         name: latitude
+ *         schema:
+ *           type: number
+ *         description: User latitude
+ *       - in: query
+ *         name: longitude
+ *         schema:
+ *           type: number
+ *         description: User longitude
+ *       - in: query
+ *         name: radius
+ *         schema:
+ *           type: number
+ *           default: 50
+ *         description: Search radius in kilometers
+ *       - in: query
+ *         name: services
+ *         schema:
+ *           type: string
+ *         description: Comma-separated services (chat,call,video)
+ *       - in: query
+ *         name: languages
+ *         schema:
+ *           type: string
+ *         description: Comma-separated languages
+ *       - in: query
+ *         name: experience
+ *         schema:
+ *           type: integer
+ *         description: Minimum years of experience
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Number of results per page
+ *     responses:
+ *       200:
+ *         description: Advanced search results
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 providers:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/User'
+ *                 totalPages:
+ *                   type: number
+ *                 currentPage:
+ *                   type: number
+ *                 total:
+ *                   type: number
+ *       500:
+ *         description: Server error
+ */
+router.get('/advanced', advancedProviderSearch);
 
 module.exports = router;

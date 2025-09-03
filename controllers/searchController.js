@@ -105,10 +105,14 @@ const searchProviders = async (req, res) => {
     const total = await User.countDocuments(filter);
 
     res.json({
-      providers,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
-      total,
+      success: true,
+      data: providers,
+      pagination: {
+        current: parseInt(page),
+        total: Math.ceil(total / limit),
+        hasNext: parseInt(page) * limit < total,
+        hasPrev: parseInt(page) > 1
+      },
       filters: {
         query,
         category,
@@ -124,7 +128,10 @@ const searchProviders = async (req, res) => {
     });
   } catch (error) {
     console.error('Search providers error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error' 
+    });
   }
 };
 
@@ -136,7 +143,10 @@ const getProviderRecommendations = async (req, res) => {
 
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found' 
+      });
     }
 
     let recommendations = [];
@@ -167,11 +177,17 @@ const getProviderRecommendations = async (req, res) => {
     }
 
     res.json({
-      recommendations
+      success: true,
+      data: {
+        recommendations
+      }
     });
   } catch (error) {
     console.error('Get provider recommendations error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error' 
+    });
   }
 };
 
@@ -192,7 +208,10 @@ const searchConsultations = async (req, res) => {
 
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found' 
+      });
     }
 
     let filter = {};
@@ -244,14 +263,21 @@ const searchConsultations = async (req, res) => {
     const total = await Consultation.countDocuments(filter);
 
     res.json({
-      consultations,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
-      total
+      success: true,
+      data: consultations,
+      pagination: {
+        current: parseInt(page),
+        total: Math.ceil(total / limit),
+        hasNext: parseInt(page) * limit < total,
+        hasPrev: parseInt(page) > 1
+      }
     });
   } catch (error) {
     console.error('Search consultations error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error' 
+    });
   }
 };
 
@@ -316,10 +342,16 @@ const getSearchSuggestions = async (req, res) => {
       }));
     }
 
-    res.json({ suggestions });
+    res.json({ 
+      success: true,
+      data: { suggestions }
+    });
   } catch (error) {
     console.error('Get search suggestions error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error' 
+    });
   }
 };
 
@@ -342,12 +374,18 @@ const getTrendingSearches = async (req, res) => {
     ]);
 
     res.json({
-      trendingSpecializations: popularSpecializations,
-      trendingCategories: popularCategories
+      success: true,
+      data: {
+        trendingSpecializations: popularSpecializations,
+        trendingCategories: popularCategories
+      }
     });
   } catch (error) {
     console.error('Get trending searches error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error' 
+    });
   }
 };
 
@@ -420,14 +458,20 @@ const advancedProviderSearch = async (req, res) => {
     const paginatedProviders = providers.slice(startIndex, endIndex);
 
     res.json({
-      providers: paginatedProviders,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
-      total
+      success: true,
+      data: {
+        providers: paginatedProviders,
+        totalPages: Math.ceil(total / limit),
+        currentPage: parseInt(page),
+        total
+      }
     });
   } catch (error) {
     console.error('Advanced provider search error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error' 
+    });
   }
 };
 

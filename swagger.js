@@ -278,13 +278,38 @@ const options = {
             message: { type: 'string', description: 'Success message' },
             data: { type: 'object', description: 'Response data' }
           }
+        },
+        PublicUsersResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            data: {
+              type: 'object',
+              properties: {
+                users: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/User' }
+                },
+                pagination: {
+                  type: 'object',
+                  properties: {
+                    currentPage: { type: 'number', example: 1 },
+                    totalPages: { type: 'number', example: 5 },
+                    totalUsers: { type: 'number', example: 50 },
+                    limit: { type: 'number', example: 10 }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
     tags: [
       { name: 'Authentication', description: 'User authentication and authorization endpoints' },
       { name: 'Admin Authentication', description: 'Admin authentication endpoints' },
-                { name: 'User Authentication', description: 'User authentication endpoints (Registration & Login)' },
+      { name: 'User Authentication', description: 'User authentication endpoints (Registration & Login)' },
+      { name: 'Users', description: 'User management and profile operations' },
       { name: 'Users - Admin', description: 'User management and profile operations (Admin only)' },
       { name: 'Admin Operations', description: 'Admin-only operations and management' },
       { name: 'Consultations - Common', description: 'Consultation booking and management (All users)' },
