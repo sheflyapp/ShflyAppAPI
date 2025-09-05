@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Category = require('../models/Category');
 const Consultation = require('../models/Consultation');
 const Payment = require('../models/Payment');
+const Question = require('../models/Question');
 
 // Apply admin authentication to all routes
 router.use(auth);
@@ -1344,6 +1345,340 @@ router.delete('/payments/:id', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Error deleting payment' 
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/admin/questions:
+ *   get:
+ *     summary: Get all questions (Admin only)
+ *     description: Retrieve all questions with filtering and search capabilities for admin management
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of questions per page
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search term for question description
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [all, pending, answered, closed]
+ *         description: Filter by status
+ *       - in: query
+ *         name: priority
+ *         schema:
+ *           type: string
+ *           enum: [all, low, medium, high, urgent]
+ *         description: Filter by priority
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *         description: Filter by category ID
+ *       - in: query
+ *         name: subcategory
+ *         schema:
+ *           type: string
+ *         description: Filter by subcategory ID
+ *     responses:
+ *       200:
+ *         description: Questions retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Question'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     current:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     hasNext:
+ *                       type: boolean
+ *                     hasPrev:
+ *                       type: boolean
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.get('/questions', async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 10, 
+      search = '', 
+      status = 'all', 
+      priority = 'all',
+      category = '',
+      subcategory = ''
+    } = req.query;
+
+    const skip = (page - 1) * limit;
+
+    // Build query
+    const query = {};
+    
+    // Search in question description
+    if (search) {
+      query.description = { $regex: search, $options: 'i' };
+    }
+    
+    // Filter by status
+    if (status !== 'all') {
+      query.status = status;
+    }
+    
+    // Filter by priority
+    if (priority !== 'all') {
+      query.priority = priority;
+    }
+    
+    // Filter by category
+    if (category) {
+      query.category = category;
+    }
+    
+    // Filter by subcategory
+    if (subcategory) {
+      query.subcategory = subcategory;
+    }
+
+    // Get total count
+    const totalQuestions = await Question.countDocuments(query);
+
+    // Get questions with pagination
+    const questions = await Question.find(query)
+      .populate('userId', 'fullname email profileImage')
+      .populate('category', 'name description color')
+      .populate('subcategory', 'name description color')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const totalPages = Math.ceil(totalQuestions / limit);
+
+    res.json({
+      success: true,
+      data: questions,
+      pagination: {
+        current: parseInt(page),
+        total: totalPages,
+        totalQuestions,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
+      }
+    });
+
+  } catch (error) {
+    console.error('Get admin questions error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching questions'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/admin/questions/{id}:
+ *   get:
+ *     summary: Get question by ID (Admin only)
+ *     description: Retrieve a specific question by ID for admin management
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Question ID
+ *     responses:
+ *       200:
+ *         description: Question retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Question'
+ *       404:
+ *         description: Question not found
+ *       500:
+ *         description: Server error
+ */
+router.get('/questions/:id', async (req, res) => {
+  try {
+    const question = await Question.findById(req.params.id)
+      .populate('userId', 'fullname email profileImage')
+      .populate('category', 'name description color')
+      .populate('subcategory', 'name description color');
+
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message: 'Question not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: question
+    });
+
+  } catch (error) {
+    console.error('Get admin question error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching question'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/admin/questions/{id}/close:
+ *   patch:
+ *     summary: Close a question (Admin only)
+ *     description: Close a question as an admin
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Question ID
+ *     responses:
+ *       200:
+ *         description: Question closed successfully
+ *       400:
+ *         description: Question already closed
+ *       404:
+ *         description: Question not found
+ *       500:
+ *         description: Server error
+ */
+router.patch('/questions/:id/close', async (req, res) => {
+  try {
+    const question = await Question.findById(req.params.id);
+
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message: 'Question not found'
+      });
+    }
+
+    if (question.status === 'closed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Question is already closed'
+      });
+    }
+
+    question.status = 'closed';
+    question.closedAt = new Date();
+    question.closedBy = req.user.id;
+    await question.save();
+
+    res.json({
+      success: true,
+      message: 'Question closed successfully',
+      data: question
+    });
+
+  } catch (error) {
+    console.error('Close admin question error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error closing question'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/admin/questions/{id}:
+ *   delete:
+ *     summary: Delete a question (Admin only)
+ *     description: Delete a question as an admin
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Question ID
+ *     responses:
+ *       200:
+ *         description: Question deleted successfully
+ *       404:
+ *         description: Question not found
+ *       500:
+ *         description: Server error
+ */
+router.delete('/questions/:id', async (req, res) => {
+  try {
+    const question = await Question.findById(req.params.id);
+
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message: 'Question not found'
+      });
+    }
+
+    await Question.findByIdAndDelete(req.params.id);
+
+    res.json({
+      success: true,
+      message: 'Question deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete admin question error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting question'
     });
   }
 });
