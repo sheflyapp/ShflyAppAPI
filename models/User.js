@@ -84,9 +84,37 @@ const UserSchema = new mongoose.Schema({
   dob: {
     type: Date
   },
-  specialization: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Category'
+  specializations: {
+    type: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Category',
+      validate: {
+        validator: async function(v) {
+          if (!v) return false;
+          
+          // Check if the specialization exists and is active
+          const Category = mongoose.model('Category');
+          const category = await Category.findById(v);
+          return category && category.isActive;
+        },
+        message: 'Each specialization must be a valid and active category or subcategory'
+      }
+    }],
+    required: function() {
+      // Specializations are required for seekers and providers, but not for admin users
+      return this.userType !== 'admin';
+    },
+    validate: {
+      validator: function(v) {
+        // For admin users, specializations are optional
+        if (this.userType === 'admin') {
+          return true;
+        }
+        // For seekers and providers, at least one specialization is required
+        return v && v.length > 0;
+      },
+      message: 'At least one specialization is required for seekers and providers'
+    }
   },
   price: {
     type: Number,
@@ -214,7 +242,7 @@ UserSchema.methods.matchPassword = async function(enteredPassword) {
 UserSchema.index({ email: 1 });
 UserSchema.index({ username: 1 });
 UserSchema.index({ userType: 1 });
-UserSchema.index({ specialization: 1 });
+UserSchema.index({ specializations: 1 });
 UserSchema.index({ country: 1 });
 UserSchema.index({ isVerified: 1 });
 UserSchema.index({ isActive: 1 });

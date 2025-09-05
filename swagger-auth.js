@@ -147,7 +147,7 @@ const authSwaggerSpecs = swaggerJsdoc({
         },
         UserRegisterRequest: {
           type: 'object',
-          required: ['fullname', 'email', 'password', 'userType', 'phone'],
+          required: ['fullname', 'email', 'password', 'userType', 'phone', 'specializations'],
           properties: {
             fullname: {
               type: 'string',
@@ -188,6 +188,13 @@ const authSwaggerSpecs = swaggerJsdoc({
               type: 'string',
               enum: ['male', 'female', 'other'],
               description: 'User gender (optional)'
+            },
+            specializations: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: 'User specialization category IDs (required for all users, at least one)'
             }
           }
         },
@@ -218,29 +225,28 @@ const authSwaggerSpecs = swaggerJsdoc({
         // Social Login Schemas
         GoogleLoginRequest: {
           type: 'object',
-          required: ['googleId', 'email', 'fullname', 'userType'],
+          required: ['idToken', 'platform', 'userType', 'specializations'],
           properties: {
-            googleId: {
+            idToken: {
               type: 'string',
-              description: 'Google user ID from OAuth'
+              description: 'Google ID token from client'
             },
-            email: {
+            platform: {
               type: 'string',
-              format: 'email',
-              description: 'User email from Google'
-            },
-            fullname: {
-              type: 'string',
-              description: 'User full name from Google'
-            },
-            profileImage: {
-              type: 'string',
-              description: 'Profile image URL from Google (optional)'
+              enum: ['android', 'ios', 'web'],
+              description: 'Platform type (android, ios, or web)'
             },
             userType: {
               type: 'string',
               enum: ['seeker', 'provider'],
               description: 'Type of user account'
+            },
+            specializations: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: 'User specialization category IDs (required for all users, at least one)'
             }
           }
         },
@@ -365,7 +371,11 @@ const authSwaggerSpecs = swaggerJsdoc({
             city: { type: 'string' },
             gender: { type: 'string', enum: ['male', 'female', 'other'] },
             dob: { type: 'string', format: 'date' },
-            specialization: { type: 'string' },
+            specializations: { 
+              type: 'array', 
+              items: { type: 'string' },
+              description: 'User specialization category IDs'
+            },
             price: { type: 'number' },
             rating: { type: 'number' },
             totalReviews: { type: 'number' },
@@ -377,6 +387,111 @@ const authSwaggerSpecs = swaggerJsdoc({
             lastLogin: { type: 'string', format: 'date-time' },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' }
+          }
+        },
+
+        // Admin User Management Schemas
+        AdminCreateUserRequest: {
+          type: 'object',
+          required: ['username', 'email', 'password', 'userType', 'phone'],
+          properties: {
+            username: {
+              type: 'string',
+              description: 'User unique username'
+            },
+            email: {
+              type: 'string',
+              format: 'email',
+              description: 'User email address'
+            },
+            password: {
+              type: 'string',
+              minLength: 6,
+              description: 'User password (minimum 6 characters)'
+            },
+            userType: {
+              type: 'string',
+              enum: ['seeker', 'provider', 'admin'],
+              description: 'Type of user account'
+            },
+            phone: {
+              type: 'string',
+              description: 'User phone number'
+            },
+            fullname: {
+              type: 'string',
+              description: 'User full name (optional)'
+            },
+            specializations: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: 'User specialization category IDs (required for seekers and providers, not required for admin)'
+            }
+          }
+        },
+        AdminUpdateUserRequest: {
+          type: 'object',
+          properties: {
+            fullname: {
+              type: 'string',
+              description: 'User full name'
+            },
+            email: {
+              type: 'string',
+              format: 'email',
+              description: 'User email address'
+            },
+            userType: {
+              type: 'string',
+              enum: ['seeker', 'provider', 'admin'],
+              description: 'Type of user account'
+            },
+            phone: {
+              type: 'string',
+              description: 'User phone number'
+            },
+            profileImage: {
+              type: 'string',
+              description: 'Profile image URL'
+            },
+            isVerified: {
+              type: 'boolean',
+              description: 'User verification status'
+            },
+            isActive: {
+              type: 'boolean',
+              description: 'User active status'
+            },
+            specializations: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: 'User specialization category IDs (required for seekers and providers, not required for admin)'
+            }
+          }
+        },
+        AdminUserResponse: {
+          type: 'object',
+          properties: {
+            success: {
+              type: 'boolean',
+              description: 'Operation success status'
+            },
+            message: {
+              type: 'string',
+              description: 'Response message'
+            },
+            data: {
+              type: 'object',
+              properties: {
+                user: {
+                  $ref: '#/components/schemas/User'
+                }
+              }
+            }
           }
         }
       }

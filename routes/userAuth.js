@@ -6,6 +6,7 @@ const router = express.Router();
 
 // Import User model
 const User = require('../models/User');
+const googleAuthService = require('../services/googleAuthService');
 
 /**
  * @swagger
@@ -32,6 +33,7 @@ const User = require('../models/User');
  *         - password
  *         - userType
  *         - phone
+ *         - specializations
  *       properties:
  *         username:
  *           type: string
@@ -64,27 +66,35 @@ const User = require('../models/User');
  *           type: string
  *           enum: [male, female, other]
  *           description: User's gender
+ *         specializations:
+ *           type: array
+ *           items:
+ *             type: string
+ *           description: User's specialization category IDs (required for all users, at least one)
  *     GoogleLoginRequest:
  *       type: object
  *       required:
- *         - googleId
- *         - email
- *         - fullname
+ *         - idToken
+ *         - platform
+ *         - userType
+ *         - specializations
  *       properties:
- *         googleId:
+ *         idToken:
  *           type: string
- *           description: Google user ID
- *         email:
+ *           description: Google ID token from client
+ *         platform:
  *           type: string
- *           format: email
- *           description: User's email from Google
- *         fullname:
- *           type: string
- *           description: User's full name from Google
+ *           enum: [android, ios, web]
+ *           description: Platform type (android, ios, or web)
  *         userType:
  *           type: string
  *           enum: [seeker, provider]
  *           description: Type of user account
+ *         specializations:
+ *           type: array
+ *           items:
+ *             type: string
+ *           description: User's specialization category IDs (required for all users, at least one)
  *     FacebookLoginRequest:
  *       type: object
  *       required:
@@ -222,7 +232,9 @@ router.post('/register', [
   body('email', 'Please include a valid email').isEmail(),
   body('password', 'Please enter a password with 6 or more characters').isLength({ min: 6 }),
   body('userType', 'UserType is required').isIn(['seeker', 'provider']),
-  body('phone', 'Phone number is required').notEmpty()
+  body('phone', 'Phone number is required').notEmpty(),
+  body('specializations', 'Specializations are required for all users').isArray({ min: 1 }),
+  body('specializations.*', 'Each specialization must be a valid ObjectId').isMongoId()
 ], async (req, res) => {
   try {
     // Check for validation errors
@@ -231,7 +243,18 @@ router.post('/register', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { username, email, password, userType, phone, profileImage, country, city, gender } = req.body;
+    const { username, email, password, userType, phone, profileImage, country, city, gender, specializations } = req.body;
+
+    // Validate specializations
+    const Category = require('../models/Category');
+    const categories = await Category.find({ 
+      _id: { $in: specializations }, 
+      isActive: true 
+    });
+    
+    if (categories.length !== specializations.length) {
+      return res.status(400).json({ message: 'One or more specializations are invalid or inactive' });
+    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ 
@@ -252,6 +275,7 @@ router.post('/register', [
       country: country || '',
       city: city || '',
       gender: gender || 'other',
+      specializations: specializations,
       isVerified: true,  // Set to true since verification is commented out
       isActive: true,
       socialLogin: false
@@ -421,41 +445,62 @@ router.post('/login', [
  *               $ref: '#/components/schemas/Error'
  */
 router.post('/google', [
-  body('googleId', 'Google ID is required').notEmpty(),
-  body('email', 'Email is required').isEmail(),
-  body('fullname', 'Full name is required').notEmpty(),
-  body('userType', 'UserType is required').isIn(['seeker', 'provider'])
+  body('idToken', 'Google ID token is required').notEmpty(),
+  body('platform', 'Platform is required').isIn(['android', 'ios', 'web']),
+  body('userType', 'UserType is required').isIn(['seeker', 'provider']),
+  body('specializations', 'Specializations are required for all users').isArray({ min: 1 }),
+  body('specializations.*', 'Each specialization must be a valid ObjectId').isMongoId()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-
-    const { googleId, email, fullname, profileImage, userType } = req.body;
-
+    const { idToken, platform, userType, specializations } = req.body;
+    // Verify Google ID token
+    const googleUser = await googleAuthService.verifyIdToken(idToken, platform);
+    if (!googleUser.emailVerified) {
+      return res.status(400).json({ message: 'Google email not verified' });
+    }
+    // Validate specializations
+    const Category = require('../models/Category');
+    const categories = await Category.find({ 
+      _id: { $in: specializations }, 
+      isActive: true 
+    });
+    
+    if (categories.length !== specializations.length) {
+      return res.status(400).json({ message: 'One or more specializations are invalid or inactive' });
+    }
     // Check if user exists with this Google ID or email
     let user = await User.findOne({ 
-      $or: [{ googleId }, { email }] 
+      $or: [{ googleId: googleUser.googleId }, { email: googleUser.email }] 
     });
 
     if (user) {
       // Update Google ID if not set
       if (!user.googleId) {
-        user.googleId = googleId;
+        user.googleId = googleUser.googleId;
         user.socialLogin = true;
-        await user.save();
       }
+      
+      // Update specializations if provided
+      if (specializations) {
+        user.specializations = specializations;
+      }
+      
+      await user.save();
     } else {
       // Create new user
       user = new User({
-        fullname,
-        username: email.split('@')[0],
-        email,
-        googleId,
+        fullname: googleUser.fullname,
+        username: googleUser.email.split('@')[0],
+        email: googleUser.email,
+        googleId: googleUser.googleId,
         userType,
         phone: '',
-        profileImage: profileImage || '',
+        profileImage: googleUser.profileImage || '',
+        specializations: specializations,
         isVerified: true,
         isActive: true,
         socialLogin: true
@@ -490,13 +535,14 @@ router.post('/google', [
         username: user.username,
         email: user.email,
         userType: user.userType,
-        phone: user.phone
+        phone: user.phone,
+        specializations: user.specializations
       }
     });
 
   } catch (error) {
     console.error('Google auth error:', error);
-    res.status(500).json({ message: 'Server error during Google authentication' });
+    res.status(500).json({ message: error.message || 'Server error during Google authentication' });
   }
 });
 
@@ -964,7 +1010,9 @@ router.get('/profile', async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
     
     // Get user from database (exclude admin users)
-    const user = await User.findById(decoded.user.id).select('-password');
+    const user = await User.findById(decoded.user.id)
+      .select('-password')
+      .populate('specializations', 'name description color');
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }

@@ -212,6 +212,7 @@ router.get('/users', async (req, res) => {
     // Get users with pagination
     const users = await User.find(finalFilter)
       .select('-password')
+      .populate('specializations', 'name description color')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -279,7 +280,9 @@ router.get('/users', async (req, res) => {
  */
 router.get('/users/:id', async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-password');
+    const user = await User.findById(req.params.id)
+      .select('-password')
+      .populate('specializations', 'name description color');
     
     if (!user) {
       return res.status(404).json({ 
@@ -301,12 +304,63 @@ router.get('/users/:id', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/admin/users/{id}:
+ *   put:
+ *     summary: Update user (Admin only)
+ *     description: Update user information including specializations. Specializations are required for seekers and providers, but not for admin users. Converting a user to admin will clear their specializations.
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/AdminUpdateUserRequest'
+ *     responses:
+ *       200:
+ *         description: User updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AdminUserResponse'
+ *       400:
+ *         description: Bad request - validation errors
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Specializations are required for seekers and providers"
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
 // @route   PUT /api/admin/users/:id
 // @desc    Update user
 // @access  Private/Admin
 router.put('/users/:id', async (req, res) => {
   try {
-    const { fullname, email, userType, isVerified, isActive, phone, profileImage } = req.body;
+    const { fullname, email, userType, isVerified, isActive, phone, profileImage, specializations } = req.body;
     
     const user = await User.findById(req.params.id);
     if (!user) {
@@ -314,6 +368,36 @@ router.put('/users/:id', async (req, res) => {
         success: false, 
         message: 'User not found' 
       });
+    }
+
+    // Validate specializations if provided
+    if (specializations !== undefined) {
+      // If userType is being changed to admin, specializations are not required
+      if (userType === 'admin') {
+        user.specializations = [];
+      } else {
+        // For seekers and providers, specializations are required
+        if (!Array.isArray(specializations) || specializations.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Specializations are required for seekers and providers'
+          });
+        }
+
+        // Validate specializations
+        const Category = require('../models/Category');
+        const categories = await Category.find({ 
+          _id: { $in: specializations }, 
+          isActive: true 
+        });
+        
+        if (categories.length !== specializations.length) {
+          return res.status(400).json({
+            success: false,
+            message: 'One or more specializations are invalid or inactive'
+          });
+        }
+      }
     }
     
     // Update user fields
@@ -324,8 +408,12 @@ router.put('/users/:id', async (req, res) => {
     if (typeof isActive === 'boolean') user.isActive = isActive;
     if (phone !== undefined) user.phone = phone;
     if (profileImage !== undefined) user.profileImage = profileImage;
+    if (specializations !== undefined) user.specializations = specializations;
     
     await user.save();
+    
+    // Populate specializations before returning
+    await user.populate('specializations', 'name description color');
     
     res.json({
       success: true,
@@ -401,12 +489,78 @@ router.delete('/users/:id', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/admin/users:
+ *   post:
+ *     summary: Create new user (Admin only)
+ *     description: Create a new user with specializations. Specializations are required for seekers and providers, but not for admin users.
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/AdminCreateUserRequest'
+ *     responses:
+ *       201:
+ *         description: User created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AdminUserResponse'
+ *       400:
+ *         description: Bad request - validation errors or user already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Specializations are required for seekers and providers"
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
 // @route   POST /api/admin/users
 // @desc    Create new user
 // @access  Private/Admin
 router.post('/users', async (req, res) => {
   try {
-    const { username, email, password, userType, phone, fullname } = req.body;
+    const { username, email, password, userType, phone, fullname, specializations } = req.body;
+    
+    // Validate specializations for non-admin users
+    if (userType !== 'admin' && (!specializations || !Array.isArray(specializations) || specializations.length === 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Specializations are required for seekers and providers'
+      });
+    }
+
+    // Validate specializations if provided
+    if (specializations && specializations.length > 0) {
+      const Category = require('../models/Category');
+      const categories = await Category.find({ 
+        _id: { $in: specializations }, 
+        isActive: true 
+      });
+      
+      if (categories.length !== specializations.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'One or more specializations are invalid or inactive'
+        });
+      }
+    }
     
     // Check if user already exists
     const existingUser = await User.findOne({ 
@@ -421,7 +575,7 @@ router.post('/users', async (req, res) => {
     }
     
     // Create new user
-    const user = new User({
+    const userData = {
       username,
       email,
       password,
@@ -430,9 +584,18 @@ router.post('/users', async (req, res) => {
       fullname: fullname || username,
       isVerified: true,
       isActive: true
-    });
+    };
+
+    // Add specializations for non-admin users
+    if (userType !== 'admin' && specializations) {
+      userData.specializations = specializations;
+    }
     
+    const user = new User(userData);
     await user.save();
+    
+    // Populate specializations before returning
+    await user.populate('specializations', 'name description color');
     
     res.status(201).json({
       success: true,

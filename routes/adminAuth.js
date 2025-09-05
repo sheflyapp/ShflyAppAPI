@@ -345,7 +345,9 @@ router.get('/profile', async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
     
     // Get user from database and verify it's an admin
-    const user = await User.findById(decoded.user.id).select('-password');
+    const user = await User.findById(decoded.user.id)
+      .select('-password')
+      .populate('specializations', 'name description color');
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }

@@ -356,7 +356,9 @@ router.get('/', auth, isAdmin, async (req, res) => {
 // @access  Private
 router.get('/:id', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-password');
+    const user = await User.findById(req.params.id)
+      .select('-password')
+      .populate('specializations', 'name description color');
     
     if (!user) {
       return res.status(404).json({ 
@@ -386,12 +388,63 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   put:
+ *     summary: Update user profile
+ *     description: Update user information including specializations. Users can update their own profile, admins can update any user. Specializations are required for seekers and providers, but not for admin users.
+ *     tags: [User Management]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/AdminUpdateUserRequest'
+ *     responses:
+ *       200:
+ *         description: User updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AdminUserResponse'
+ *       400:
+ *         description: Bad request - validation errors
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Specializations are required for seekers and providers"
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Access denied
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
 // @route   PUT /api/users/:id
 // @desc    Update user (admin or own profile)
 // @access  Private
 router.put('/:id', auth, async (req, res) => {
   try {
-    const { fullname, email, userType, isVerified, isActive, phone, profileImage } = req.body;
+    const { fullname, email, userType, isVerified, isActive, phone, profileImage, specializations } = req.body;
     
     const user = await User.findById(req.params.id);
     if (!user) {
@@ -415,6 +468,36 @@ router.put('/:id', auth, async (req, res) => {
       delete req.body.isVerified;
       delete req.body.isActive;
     }
+
+    // Validate specializations if provided
+    if (specializations !== undefined) {
+      // If userType is being changed to admin, specializations are not required
+      if (userType === 'admin') {
+        user.specializations = [];
+      } else {
+        // For seekers and providers, specializations are required
+        if (!Array.isArray(specializations) || specializations.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Specializations are required for seekers and providers'
+          });
+        }
+
+        // Validate specializations
+        const Category = require('../models/Category');
+        const categories = await Category.find({ 
+          _id: { $in: specializations }, 
+          isActive: true 
+        });
+        
+        if (categories.length !== specializations.length) {
+          return res.status(400).json({
+            success: false,
+            message: 'One or more specializations are invalid or inactive'
+          });
+        }
+      }
+    }
     
     // Update user fields
     if (fullname) user.fullname = fullname;
@@ -424,8 +507,12 @@ router.put('/:id', auth, async (req, res) => {
     if (typeof isActive === 'boolean' && req.userProfile.userType === 'admin') user.isActive = isActive;
     if (phone !== undefined) user.phone = phone;
     if (profileImage !== undefined) user.profileImage = profileImage;
+    if (specializations !== undefined) user.specializations = specializations;
     
     await user.save();
+    
+    // Populate specializations before returning
+    await user.populate('specializations', 'name description color');
     
     res.json({
       success: true,

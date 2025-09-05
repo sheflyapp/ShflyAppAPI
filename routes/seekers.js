@@ -147,7 +147,9 @@ router.post('/', auth, isAdmin, async (req, res) => {
 // @access  Private
 router.get('/:id', auth, async (req, res) => {
   try {
-    const seeker = await User.findById(req.params.id).select('-password');
+    const seeker = await User.findById(req.params.id)
+      .select('-password')
+      .populate('specializations', 'name description color');
     
     if (!seeker || seeker.userType !== 'seeker') {
       return res.status(404).json({ 

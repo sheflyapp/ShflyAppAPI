@@ -70,7 +70,11 @@ const options = {
             rating: { type: 'number', description: 'Average rating (providers only)' },
             totalReviews: { type: 'integer', description: 'Total number of reviews' },
             price: { type: 'number', description: 'Consultation price (providers only)' },
-            specialization: { type: 'string', description: 'Category ID for specialization' },
+            specializations: { 
+              type: 'array', 
+              items: { type: 'string' },
+              description: 'User specialization category IDs'
+            },
             availability: {
               type: 'object',
               properties: {

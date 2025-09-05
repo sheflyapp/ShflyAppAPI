@@ -32,6 +32,7 @@ const User = require('../models/User');
  *         - password
  *         - userType
  *         - phone
+ *         - specializations
  *       properties:
  *         username:
  *           type: string
@@ -51,6 +52,11 @@ const User = require('../models/User');
  *         phone:
  *           type: string
  *           description: User's phone number
+ *         specializations:
+ *           type: array
+ *           items:
+ *             type: string
+ *           description: User's specialization category IDs (required for all users, at least one)
  *     CreateAdminRequest:
  *       type: object
  *       required:
@@ -265,7 +271,9 @@ router.post('/register', [
   body('email', 'Please include a valid email').isEmail(),
   body('password', 'Please enter a password with 6 or more characters').isLength({ min: 6 }),
   body('userType', 'UserType is required').isIn(['seeker', 'provider']),
-  body('phone', 'Phone number is required').notEmpty()
+  body('phone', 'Phone number is required').notEmpty(),
+  body('specializations', 'Specializations are required for all users').isArray({ min: 1 }),
+  body('specializations.*', 'Each specialization must be a valid ObjectId').isMongoId()
 ], async (req, res) => {
   try {
     // Check for validation errors
@@ -274,7 +282,18 @@ router.post('/register', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { username, email, password, userType, phone } = req.body;
+    const { username, email, password, userType, phone, specializations } = req.body;
+
+    // Validate specializations
+    const Category = require('../models/Category');
+    const categories = await Category.find({ 
+      _id: { $in: specializations }, 
+      isActive: true 
+    });
+    
+    if (categories.length !== specializations.length) {
+      return res.status(400).json({ message: 'One or more specializations are invalid or inactive' });
+    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ 
@@ -291,6 +310,7 @@ router.post('/register', [
       password,  // Plain password - will be hashed by User model
       userType,
       phone: phone || '',
+      specializations: specializations,
       isVerified: true,  // Set to true since verification is commented out
       isActive: true
     };
@@ -401,6 +421,9 @@ router.post('/login', [
     user.lastLogin = new Date();
     await user.save();
 
+    // Populate specializations for the response
+    await user.populate('specializations', 'name description color');
+
     // Create JWT token
     const payload = {
       user: {
@@ -425,7 +448,8 @@ router.post('/login', [
         username: user.username,
         email: user.email,
         userType: user.userType,
-        phone: user?.phone || ""
+        phone: user?.phone || "",
+        specializations: user.specializations || []
       }
     });
 
@@ -492,7 +516,9 @@ router.get('/user', async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
     
     // Get user from database
-    const user = await User.findById(decoded.user.id).select('-password');
+    const user = await User.findById(decoded.user.id)
+      .select('-password')
+      .populate('specializations', 'name description color');
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
