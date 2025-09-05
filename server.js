@@ -122,6 +122,11 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/shfly_app
 });
 
 // Swagger Documentation
+app.get('/api-docs/swagger.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpecs);
+});
+
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
   customCss: '.swagger-ui .topbar { display: none }',
   customSiteTitle: 'Shfly App API Documentation',
@@ -173,6 +178,7 @@ app.use('/api/wallet', require('./routes/wallet'));
 app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/availability', require('./routes/availability'));
 app.use('/api/profile', require('./routes/profile'));
+app.use('/api/questions', require('./routes/questions'));
 
 // Error handling middleware
 app.use((err, req, res, next) => {

@@ -38,7 +38,7 @@ async function testGoogleAuth() {
     };
 
     const iosRequest = {
-      idToken: 'IOS_GOOGLE_ID_TOKEN_HERE',
+      idToken: '116475487823735986481',
       platform: 'ios',
       userType: 'seeker',
       specialization: testCategory._id.toString()

@@ -536,7 +536,7 @@ router.post('/google', [
         email: user.email,
         userType: user.userType,
         phone: user.phone,
-        specializations: user.specializations
+        specialization: user.specialization
       }
     });
 
@@ -1010,9 +1010,7 @@ router.get('/profile', async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
     
     // Get user from database (exclude admin users)
-    const user = await User.findById(decoded.user.id)
-      .select('-password')
-      .populate('specializations', 'name description color');
+    const user = await User.findById(decoded.user.id).select('-password');
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
