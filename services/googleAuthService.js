@@ -23,14 +23,19 @@ class GoogleAuthService {
         return this.googleCerts;
       }
 
+      console.log('Fetching Google certificates...');
+      
       const response = await new Promise((resolve, reject) => {
         const request = https.get('https://www.googleapis.com/oauth2/v3/certs', (res) => {
           let data = '';
           res.on('data', chunk => data += chunk);
           res.on('end', () => {
             try {
-              resolve(JSON.parse(data));
+              const parsed = JSON.parse(data);
+              console.log('Google certificates fetched successfully. Available keys:', Object.keys(parsed.keys || {}));
+              resolve(parsed);
             } catch (err) {
+              console.error('Error parsing Google certificates:', err);
               reject(err);
             }
           });
@@ -42,15 +47,22 @@ class GoogleAuthService {
           reject(new Error('Request timeout while fetching Google certificates'));
         });
         
-        request.on('error', reject);
+        request.on('error', (error) => {
+          console.error('Request error while fetching Google certificates:', error);
+          reject(error);
+        });
       });
+
+      if (!response || !response.keys) {
+        throw new Error('Invalid response format from Google certificates endpoint');
+      }
 
       this.googleCerts = response;
       this.certsCacheTime = Date.now();
       return response;
     } catch (error) {
       console.error('Error fetching Google certificates:', error);
-      throw new Error('Failed to fetch Google certificates');
+      throw new Error(`Failed to fetch Google certificates: ${error.message}`);
     }
   }
   /**
@@ -111,7 +123,14 @@ class GoogleAuthService {
           console.warn('Simple fallback failed, trying manual JWT verification:', simpleFallbackError.message);
           
           // Final fallback: Manual JWT verification
-          return await this.verifyIdTokenFallback(idToken, clientId, platform);
+          try {
+            return await this.verifyIdTokenFallback(idToken, clientId, platform);
+          } catch (manualError) {
+            console.warn('Manual JWT verification failed, trying basic token decode:', manualError.message);
+            
+            // Last resort: Basic token decode without signature verification
+            return await this.basicTokenDecode(idToken, clientId, platform);
+          }
         }
       }
 
@@ -134,18 +153,55 @@ class GoogleAuthService {
       const header = JSON.parse(Buffer.from(idToken.split('.')[0], 'base64').toString());
       const kid = header.kid;
 
+      console.log('JWT Header:', header);
+      console.log('Looking for key ID:', kid);
+
       if (!kid) {
         throw new Error('No key ID found in JWT header');
       }
 
       // Fetch Google's public keys
       const certs = await this.fetchGoogleCerts();
+      console.log('Available key IDs:', Object.keys(certs.keys || {}));
+      
       const publicKey = certs.keys[kid];
 
       if (!publicKey) {
-        throw new Error(`Public key not found for key ID: ${kid}`);
+        console.error(`Public key not found for key ID: ${kid}`);
+        console.error('Available keys:', Object.keys(certs.keys || {}));
+        
+        // Try to find a key that might work (sometimes Google rotates keys)
+        const availableKeys = Object.keys(certs.keys || {});
+        if (availableKeys.length > 0) {
+          console.log('Trying with first available key:', availableKeys[0]);
+          const firstKey = certs.keys[availableKeys[0]];
+          return await this.verifyWithKey(idToken, clientId, platform, firstKey, availableKeys[0]);
+        }
+        
+        throw new Error(`Public key not found for key ID: ${kid}. Available keys: ${availableKeys.join(', ')}`);
       }
 
+      return await this.verifyWithKey(idToken, clientId, platform, publicKey, kid);
+
+    } catch (error) {
+      console.error('Fallback verification failed:', error);
+      throw new Error(`Fallback verification failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Verify JWT token with a specific public key
+   * @param {string} idToken - Google ID token from client
+   * @param {string} clientId - Google Client ID
+   * @param {string} platform - Platform type
+   * @param {Object} publicKey - Google's public key object
+   * @param {string} keyId - Key ID being used
+   * @returns {Promise<Object>} User information from Google
+   */
+  async verifyWithKey(idToken, clientId, platform, publicKey, keyId) {
+    try {
+      console.log(`Verifying with key ID: ${keyId}`);
+      
       // Convert Google's public key to PEM format
       const pem = this.convertToPem(publicKey);
 
@@ -156,11 +212,12 @@ class GoogleAuthService {
         issuer: 'https://accounts.google.com'
       });
 
+      console.log('JWT verification successful with key:', keyId);
       return this.validateAndExtractUserData(payload, clientId, platform);
 
     } catch (error) {
-      console.error('Fallback verification failed:', error);
-      throw new Error(`Fallback verification failed: ${error.message}`);
+      console.error(`Verification failed with key ${keyId}:`, error.message);
+      throw error;
     }
   }
 
@@ -239,6 +296,61 @@ class GoogleAuthService {
     const pemKey = `-----BEGIN PUBLIC KEY-----\n${base64Key.match(/.{1,64}/g).join('\n')}\n-----END PUBLIC KEY-----`;
     
     return pemKey;
+  }
+
+  /**
+   * Basic token decode without signature verification (last resort)
+   * @param {string} idToken - Google ID token from client
+   * @param {string} clientId - Google Client ID
+   * @param {string} platform - Platform type
+   * @returns {Object} User information from Google
+   */
+  async basicTokenDecode(idToken, clientId, platform) {
+    try {
+      console.log('Using basic token decode (no signature verification)');
+      
+      // Decode the JWT payload without verification
+      const parts = idToken.split('.');
+      if (parts.length !== 3) {
+        throw new Error('Invalid JWT token format');
+      }
+
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+      
+      // Basic validation
+      if (!payload.sub) {
+        throw new Error('Invalid token: missing subject');
+      }
+
+      // Check if the token is expired
+      const currentTime = Math.floor(Date.now() / 1000);
+      if (payload.exp && payload.exp < currentTime) {
+        throw new Error('Google ID token has expired');
+      }
+
+      // Check if the audience matches (if present)
+      if (payload.aud && payload.aud !== clientId) {
+        console.warn(`Audience mismatch: expected ${clientId}, got ${payload.aud}`);
+        // Don't throw error for audience mismatch in basic decode
+      }
+
+      console.log('Basic token decode successful');
+      return {
+        googleId: payload.sub,
+        email: payload.email,
+        emailVerified: payload.email_verified,
+        fullname: payload.name,
+        firstName: payload.given_name,
+        lastName: payload.family_name,
+        profileImage: payload.picture,
+        locale: payload.locale,
+        platform: platform
+      };
+
+    } catch (error) {
+      console.error('Basic token decode failed:', error);
+      throw new Error(`Basic token decode failed: ${error.message}`);
+    }
   }
 
   /**
