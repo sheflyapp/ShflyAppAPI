@@ -41,7 +41,10 @@ const UserSchema = new mongoose.Schema({
   },
   phone: {
     type: String,
-    required: [true, 'Please add a Phone number'],
+    required: function() {
+      // Phone is required only if not using social login
+      return !this.socialLogin;
+    },
     maxlength: [20, 'Phone number cannot be more than 20 characters']
   },
   profileImage: {

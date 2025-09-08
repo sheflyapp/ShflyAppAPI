@@ -216,7 +216,10 @@ const authSwaggerSpecs = swaggerJsdoc({
                 fullname: { type: 'string' },
                 email: { type: 'string' },
                 userType: { type: 'string', enum: ['seeker', 'provider'] },
-                phone: { type: 'string' }
+                phone: { 
+                  type: 'string',
+                  description: 'User phone number (optional for social login users)'
+                }
               }
             }
           }
@@ -233,8 +236,8 @@ const authSwaggerSpecs = swaggerJsdoc({
             },
             platform: {
               type: 'string',
-              enum: ['android', 'ios', 'web'],
-              description: 'Platform type (android, ios, or web)'
+              enum: ['android', 'ios'],
+              description: 'Platform type (android or ios)'
             },
             userType: {
               type: 'string',

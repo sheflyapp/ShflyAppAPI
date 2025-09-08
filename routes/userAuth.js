@@ -84,8 +84,8 @@ const googleAuthService = require('../services/googleAuthService');
  *           description: Google ID token from client
  *         platform:
  *           type: string
- *           enum: [android, ios, web]
- *           description: Platform type (android, ios, or web)
+ *           enum: [android, ios]
+ *           description: Platform type (android or ios)
  *         userType:
  *           type: string
  *           enum: [seeker, provider]
@@ -191,7 +191,7 @@ const googleAuthService = require('../services/googleAuthService');
  *               description: User type
  *             phone:
  *               type: string
- *               description: User's phone number
+ *               description: User's phone number (optional for social login users)
  */
 
 /**
@@ -446,7 +446,7 @@ router.post('/login', [
  */
 router.post('/google', [
   body('idToken', 'Google ID token is required').notEmpty(),
-  body('platform', 'Platform is required').isIn(['android', 'ios', 'web']),
+  body('platform', 'Platform is required').isIn(['android', 'ios']),
   body('userType', 'UserType is required').isIn(['seeker', 'provider']),
   body('specializations', 'Specializations are required for all users').isArray({ min: 1 }),
   body('specializations.*', 'Each specialization must be a valid ObjectId').isMongoId()
@@ -498,12 +498,12 @@ router.post('/google', [
         email: googleUser.email,
         googleId: googleUser.googleId,
         userType,
-        phone: '',
         profileImage: googleUser.profileImage || '',
         specializations: specializations,
         isVerified: true,
         isActive: true,
         socialLogin: true
+        // phone is not required for social login users
       });
       await user.save();
     }
