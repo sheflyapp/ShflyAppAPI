@@ -173,7 +173,7 @@ const roleAuth = require('../middleware/roleAuth');
 router.post('/', auth, [
   body('category', 'Category is required').notEmpty().isMongoId(),
   body('subcategory', 'Subcategory is required').notEmpty().isMongoId(),
-  body('description', 'Question description is required').notEmpty().trim().isLength({ min: 10, max: 2000 }),
+  body('description', 'Question description is required').trim().notEmpty().isLength({ min: 10, max: 2000 }),
   body('priority', 'Invalid priority').optional().isIn(['low', 'medium', 'high', 'urgent']),
   body('tags', 'Tags must be an array').optional().isArray(),
   body('tags.*', 'Each tag must be a string').optional().isString().trim(),

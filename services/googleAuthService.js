@@ -93,12 +93,12 @@ class GoogleAuthService {
       // Try the primary method first (OAuth2Client)
       try {
         const client = new OAuth2Client();
-        const ticket = await client.verifyIdToken({
-          idToken: idToken,
-          audience: clientId,
-        });
+      const ticket = await client.verifyIdToken({
+        idToken: idToken,
+        audience: clientId,
+      });
 
-        const payload = ticket.getPayload();
+      const payload = ticket.getPayload();
         return this.validateAndExtractUserData(payload, clientId, platform);
       } catch (primaryError) {
         console.warn('Primary verification method failed, trying fallback:', primaryError.message);
@@ -361,33 +361,33 @@ class GoogleAuthService {
    * @returns {Object} User information
    */
   validateAndExtractUserData(payload, clientId, platform) {
-    // Validate the token
-    if (!payload) {
-      throw new Error('Invalid Google ID token');
-    }
+      // Validate the token
+      if (!payload) {
+        throw new Error('Invalid Google ID token');
+      }
 
-    // Check if the token is expired
-    const currentTime = Math.floor(Date.now() / 1000);
-    if (payload.exp < currentTime) {
-      throw new Error('Google ID token has expired');
-    }
+      // Check if the token is expired
+      const currentTime = Math.floor(Date.now() / 1000);
+      if (payload.exp < currentTime) {
+        throw new Error('Google ID token has expired');
+      }
 
-    // Check if the audience matches
-    if (payload.aud !== clientId) {
-      throw new Error('Invalid audience for Google ID token');
-    }
+      // Check if the audience matches
+      if (payload.aud !== clientId) {
+        throw new Error('Invalid audience for Google ID token');
+      }
 
-    return {
-      googleId: payload.sub,
-      email: payload.email,
-      emailVerified: payload.email_verified,
-      fullname: payload.name,
-      firstName: payload.given_name,
-      lastName: payload.family_name,
-      profileImage: payload.picture,
-      locale: payload.locale,
-      platform: platform
-    };
+      return {
+        googleId: payload.sub,
+        email: payload.email,
+        emailVerified: payload.email_verified,
+        fullname: payload.name,
+        firstName: payload.given_name,
+        lastName: payload.family_name,
+        profileImage: payload.picture,
+        locale: payload.locale,
+        platform: platform
+      };
   }
 
 
