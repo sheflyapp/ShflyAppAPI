@@ -8,7 +8,7 @@ const { upload } = require('../controllers/uploadController');
  * /api/upload:
  *   post:
  *     summary: Upload multiple files
- *     tags: [Upload]
+ *     tags: [Upload - Common]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -99,7 +99,7 @@ router.post('/', auth, upload.array('files', 5), async (req, res) => {
  * /api/upload/image:
  *   post:
  *     summary: Upload a single image
- *     tags: [Upload]
+ *     tags: [Upload - Common]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -196,7 +196,7 @@ router.post('/image', auth, upload.single('image'), async (req, res) => {
  * /api/upload/document:
  *   post:
  *     summary: Upload a document
- *     tags: [Upload]
+ *     tags: [Upload - Common]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -299,7 +299,7 @@ router.post('/document', auth, upload.single('document'), async (req, res) => {
  * /api/upload/profile-image:
  *   post:
  *     summary: Upload profile image
- *     tags: [Upload]
+ *     tags: [Upload - Common]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -375,7 +375,7 @@ router.post('/profile-image', auth, upload.single('profileImage'), async (req, r
  * /api/upload/{filename}:
  *   delete:
  *     summary: Delete a file
- *     tags: [Upload]
+ *     tags: [Upload - Common]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -439,7 +439,7 @@ router.delete('/:filename', auth, async (req, res) => {
  * /api/upload/optimize-image:
  *   get:
  *     summary: Get optimized image URL
- *     tags: [Upload]
+ *     tags: [Upload - Common]
  *     security:
  *       - bearerAuth: []
  *     parameters:

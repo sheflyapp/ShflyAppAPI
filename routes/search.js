@@ -18,7 +18,7 @@ const {
  * /api/search:
  *   get:
  *     summary: General search across all entities
- *     tags: [Search]
+ *     tags: [Search - Common]
  *     parameters:
  *       - in: query
  *         name: q
@@ -202,7 +202,7 @@ router.get('/', async (req, res) => {
  * /api/search/providers:
  *   get:
  *     summary: Search for providers with advanced filters
- *     tags: [Search]
+ *     tags: [Search - Common]
  *     parameters:
  *       - in: query
  *         name: q
@@ -297,7 +297,7 @@ router.get('/providers', searchProviders);
  * /api/search/consultations:
  *   get:
  *     summary: Search for consultations
- *     tags: [Search]
+ *     tags: [Search - Common]
  *     parameters:
  *       - in: query
  *         name: q
@@ -363,7 +363,7 @@ router.get('/consultations', auth, searchConsultations);
  * /api/search/categories:
  *   get:
  *     summary: Search for categories
- *     tags: [Search]
+ *     tags: [Search - Common]
  *     parameters:
  *       - in: query
  *         name: q
@@ -461,7 +461,7 @@ router.get('/categories', async (req, res) => {
  * /api/search/suggestions:
  *   get:
  *     summary: Get search suggestions
- *     tags: [Search]
+ *     tags: [Search - Common]
  *     parameters:
  *       - in: query
  *         name: query
@@ -507,7 +507,7 @@ router.get('/suggestions', getSearchSuggestions);
  * /api/search/trending:
  *   get:
  *     summary: Get trending searches
- *     tags: [Search]
+ *     tags: [Search - Common]
  *     responses:
  *       200:
  *         description: Trending searches
@@ -530,7 +530,7 @@ router.get('/trending', getTrendingSearches);
  * /api/search/recommendations:
  *   get:
  *     summary: Get provider recommendations for user
- *     tags: [Search]
+ *     tags: [Search - Common]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -564,7 +564,7 @@ router.get('/recommendations', auth, getProviderRecommendations);
  * /api/search/advanced:
  *   get:
  *     summary: Advanced provider search with geolocation
- *     tags: [Search]
+ *     tags: [Search - Common]
  *     parameters:
  *       - in: query
  *         name: latitude

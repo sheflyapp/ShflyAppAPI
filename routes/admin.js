@@ -7,15 +7,12 @@ const Consultation = require('../models/Consultation');
 const Payment = require('../models/Payment');
 const Question = require('../models/Question');
 
-// Apply admin authentication to all routes
-router.use(auth);
-router.use(isAdmin);
-
 /**
  * @swagger
- * /api/admin/dashboard/stats:
+ * /api/admin/dashboard:
  *   get:
  *     summary: Get admin dashboard statistics
+ *     description: Retrieve comprehensive statistics for admin dashboard
  *     tags: [Admin Operations]
  *     security:
  *       - bearerAuth: []
@@ -32,21 +29,22 @@ router.use(isAdmin);
  *                 data:
  *                   type: object
  *                   properties:
- *                     overview:
- *                       type: object
- *                       properties:
- *                         totalUsers:
- *                           type: integer
- *                         totalProviders:
- *                           type: integer
- *                         totalSeekers:
- *                           type: integer
- *                         totalCategories:
- *                           type: integer
- *                         totalConsultations:
- *                           type: integer
- *                         totalRevenue:
- *                           type: number
+ *                     totalUsers:
+ *                       type: number
+ *                     totalSeekers:
+ *                       type: number
+ *                     totalProviders:
+ *                       type: number
+ *                     totalConsultations:
+ *                       type: number
+ *                     totalPayments:
+ *                       type: number
+ *                     totalRevenue:
+ *                       type: number
+ *                     recentUsers:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/User'
  *       401:
  *         description: Unauthorized
  *       403:
@@ -54,66 +52,79 @@ router.use(isAdmin);
  *       500:
  *         description: Server error
  */
-router.get('/dashboard/stats', async (req, res) => {
+router.get('/dashboard', auth, isAdmin, async (req, res) => {
   try {
-    // Get user counts
+    // Get user statistics
     const totalUsers = await User.countDocuments();
-    const totalProviders = await User.countDocuments({ userType: 'provider' });
     const totalSeekers = await User.countDocuments({ userType: 'seeker' });
-    
-    // Get categories count
-    const totalCategories = await Category.countDocuments();
-    
-    // Get consultation count
+    const totalProviders = await User.countDocuments({ userType: 'provider' });
+    const totalAdmins = await User.countDocuments({ userType: 'admin' });
+
+    // Get consultation statistics
     const totalConsultations = await Consultation.countDocuments();
-    
-    // Get recent consultations
-    const recentConsultations = await Consultation.find()
-      .populate('seeker', 'fullname email')
-      .populate('provider', 'fullname email specialization')
-      .populate('category', 'name')
-      .sort({ createdAt: -1 })
-      .limit(10);
-    
-    // Calculate total revenue from completed payments
+    const pendingConsultations = await Consultation.countDocuments({ status: 'pending' });
+    const completedConsultations = await Consultation.countDocuments({ status: 'completed' });
+
+    // Get payment statistics
+    const totalPayments = await Payment.countDocuments();
+    const completedPayments = await Payment.countDocuments({ status: 'completed' });
     const totalRevenue = await Payment.aggregate([
       { $match: { status: 'completed' } },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
-    
-    const revenue = totalRevenue.length > 0 ? totalRevenue[0].total : 0;
-    
+
+    // Get recent users (last 10)
+    const recentUsers = await User.find()
+      .select('-password')
+      .sort({ createdAt: -1 })
+      .limit(10);
+
+    // Get recent consultations (last 5)
+    const recentConsultations = await Consultation.find()
+      .populate('seeker', 'fullname email')
+      .populate('provider', 'fullname email')
+      .sort({ createdAt: -1 })
+      .limit(5);
+
     res.json({
       success: true,
       data: {
-        overview: {
-          totalUsers,
-          totalProviders,
-          totalSeekers,
-          totalCategories,
-          totalConsultations,
-          totalRevenue: revenue
+        users: {
+          total: totalUsers,
+          seekers: totalSeekers,
+          providers: totalProviders,
+          admins: totalAdmins
         },
-        recent: {
-          consultations: recentConsultations
-        }
+        consultations: {
+          total: totalConsultations,
+          pending: pendingConsultations,
+          completed: completedConsultations
+        },
+        payments: {
+          total: totalPayments,
+          completed: completedPayments,
+          revenue: totalRevenue[0]?.total || 0
+        },
+        recentUsers,
+        recentConsultations
       }
     });
   } catch (error) {
-    console.error('Dashboard stats error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching dashboard statistics' 
+    console.error('Dashboard error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching dashboard data'
     });
   }
 });
 
 /**
  * @swagger
- * /api/admin/users:
+ * /api/admin/categories:
  *   get:
- *     summary: Get all users with pagination and filtering
- *     tags: [Admin Operations]
+ *     summary: Get all categories (Admin only)
+ *     description: Retrieve all categories with filtering and search capabilities
+ *     tags: [Categories - Admin]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -128,509 +139,18 @@ router.get('/dashboard/stats', async (req, res) => {
  *         schema:
  *           type: integer
  *           default: 10
- *         description: Number of users per page
- *       - in: query
- *         name: search
- *         schema:
- *           type: string
- *         description: Search term for name, email, or username
- *       - in: query
- *         name: userType
- *         schema:
- *           type: string
- *           enum: [all, admin, seeker, provider]
- *         description: Filter by user type
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *           enum: [all, verified, unverified, active, inactive]
- *         description: Filter by user status
- *     responses:
- *       200:
- *         description: Users retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/User'
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     current:
- *                       type: integer
- *                     total:
- *                       type: integer
- *                     hasNext:
- *                       type: boolean
- *                     hasPrev:
- *                       type: boolean
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - Admin access required
- *       500:
- *         description: Server error
- */
-router.get('/users', async (req, res) => {
-  try {
-    const { page = 1, limit = 10, search = '', userType = '', status = '' } = req.query;
-    const skip = (page - 1) * limit;
-    
-    // Build filter object
-    const filter = {};
-    if (userType && userType !== 'all') {
-      filter.userType = userType;
-    }
-    if (status && status !== 'all') {
-      if (status === 'verified') filter.isVerified = true;
-      else if (status === 'unverified') filter.isVerified = false;
-      else if (status === 'active') filter.isActive = true;
-      else if (status === 'inactive') filter.isActive = false;
-    }
-    
-    // Build search query
-    let searchQuery = {};
-    if (search) {
-      searchQuery = {
-        $or: [
-          { fullname: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } },
-          { username: { $regex: search, $options: 'i' } }
-        ]
-      };
-    }
-    
-    // Combine filters
-    const finalFilter = { ...filter, ...searchQuery };
-    
-    // Get users with pagination
-    const users = await User.find(finalFilter)
-      .select('-password')
-      .populate('specializations', 'name description color')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
-    
-    // Get total count for pagination
-    const totalUsers = await User.countDocuments(finalFilter);
-    const totalPages = Math.ceil(totalUsers / limit);
-    
-    res.json({
-      success: true,
-      data: {
-        users,
-        pagination: {
-          currentPage: parseInt(page),
-          totalPages,
-          totalUsers,
-          limit: parseInt(limit)
-        }
-      }
-    });
-  } catch (error) {
-    console.error('Get users error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching users' 
-    });
-  }
-});
-
-/**
- * @swagger
- * /api/admin/users/{id}:
- *   get:
- *     summary: Get user by ID
- *     tags: [Admin]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: User ID
- *     responses:
- *       200:
- *         description: User retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   $ref: '#/components/schemas/User'
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - Admin access required
- *       404:
- *         description: User not found
- *       500:
- *         description: Server error
- */
-router.get('/users/:id', async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id)
-      .select('-password')
-      .populate('specializations', 'name description color');
-    
-    if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: { user }
-    });
-  } catch (error) {
-    console.error('Get user error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching user' 
-    });
-  }
-});
-
-/**
- * @swagger
- * /api/admin/users/{id}:
- *   put:
- *     summary: Update user (Admin only)
- *     description: Update user information including specializations. Specializations are required for seekers and providers, but not for admin users. Converting a user to admin will clear their specializations.
- *     tags: [Admin Operations]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: User ID
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/AdminUpdateUserRequest'
- *     responses:
- *       200:
- *         description: User updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/AdminUserResponse'
- *       400:
- *         description: Bad request - validation errors
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: false
- *                 message:
- *                   type: string
- *                   example: "Specializations are required for seekers and providers"
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - Admin access required
- *       404:
- *         description: User not found
- *       500:
- *         description: Server error
- */
-// @route   PUT /api/admin/users/:id
-// @desc    Update user
-// @access  Private/Admin
-router.put('/users/:id', async (req, res) => {
-  try {
-    const { fullname, email, userType, isVerified, isActive, phone, profileImage, specializations } = req.body;
-    
-    const user = await User.findById(req.params.id);
-    if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
-      });
-    }
-
-    // Validate specializations if provided
-    if (specializations !== undefined) {
-      // If userType is being changed to admin, specializations are not required
-      if (userType === 'admin') {
-        user.specializations = [];
-      } else {
-        // For seekers and providers, specializations are required
-        if (!Array.isArray(specializations) || specializations.length === 0) {
-          return res.status(400).json({
-            success: false,
-            message: 'Specializations are required for seekers and providers'
-          });
-        }
-
-        // Validate specializations
-        const Category = require('../models/Category');
-        const categories = await Category.find({ 
-          _id: { $in: specializations }, 
-          isActive: true 
-        });
-        
-        if (categories.length !== specializations.length) {
-          return res.status(400).json({
-            success: false,
-            message: 'One or more specializations are invalid or inactive'
-          });
-        }
-      }
-    }
-    
-    // Update user fields
-    if (fullname) user.fullname = fullname;
-    if (email) user.email = email;
-    if (userType) user.userType = userType;
-    if (typeof isVerified === 'boolean') user.isVerified = isVerified;
-    if (typeof isActive === 'boolean') user.isActive = isActive;
-    if (phone !== undefined) user.phone = phone;
-    if (profileImage !== undefined) user.profileImage = profileImage;
-    if (specializations !== undefined) user.specializations = specializations;
-    
-    await user.save();
-    
-    // Populate specializations before returning
-    await user.populate('specializations', 'name description color');
-    
-    res.json({
-      success: true,
-      message: 'User updated successfully',
-      data: { user: user.toObject({ hide: 'password' }) }
-    });
-  } catch (error) {
-    console.error('Update user error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error updating user' 
-    });
-  }
-});
-
-// @route   PUT /api/admin/users/:id/status
-// @desc    Toggle user active status
-// @access  Private/Admin
-router.put('/users/:id/status', async (req, res) => {
-  try {
-    const { isActive } = req.body;
-    
-    const user = await User.findById(req.params.id);
-    if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
-      });
-    }
-    
-    user.isActive = isActive;
-    await user.save();
-    
-    res.json({
-      success: true,
-      message: `User ${isActive ? 'activated' : 'deactivated'} successfully`,
-      data: { user: user.toObject({ hide: 'password' }) }
-    });
-  } catch (error) {
-    console.error('Toggle user status error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error updating user status' 
-    });
-  }
-});
-
-// @route   DELETE /api/admin/users/:id
-// @desc    Delete user
-// @access  Private/Admin
-router.delete('/users/:id', async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id);
-    if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
-      });
-    }
-    
-    await User.findByIdAndDelete(req.params.id);
-    
-    res.json({
-      success: true,
-      message: 'User deleted successfully'
-    });
-  } catch (error) {
-    console.error('Delete user error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error deleting user' 
-    });
-  }
-});
-
-/**
- * @swagger
- * /api/admin/users:
- *   post:
- *     summary: Create new user (Admin only)
- *     description: Create a new user with specializations. Specializations are required for seekers and providers, but not for admin users.
- *     tags: [Admin Operations]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/AdminCreateUserRequest'
- *     responses:
- *       201:
- *         description: User created successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/AdminUserResponse'
- *       400:
- *         description: Bad request - validation errors or user already exists
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: false
- *                 message:
- *                   type: string
- *                   example: "Specializations are required for seekers and providers"
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - Admin access required
- *       500:
- *         description: Server error
- */
-// @route   POST /api/admin/users
-// @desc    Create new user
-// @access  Private/Admin
-router.post('/users', async (req, res) => {
-  try {
-    const { username, email, password, userType, phone, fullname, specializations } = req.body;
-    
-    // Validate specializations for non-admin users
-    if (userType !== 'admin' && (!specializations || !Array.isArray(specializations) || specializations.length === 0)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Specializations are required for seekers and providers'
-      });
-    }
-
-    // Validate specializations if provided
-    if (specializations && specializations.length > 0) {
-      const Category = require('../models/Category');
-      const categories = await Category.find({ 
-        _id: { $in: specializations }, 
-        isActive: true 
-      });
-      
-      if (categories.length !== specializations.length) {
-        return res.status(400).json({
-          success: false,
-          message: 'One or more specializations are invalid or inactive'
-        });
-      }
-    }
-    
-    // Check if user already exists
-    const existingUser = await User.findOne({ 
-      $or: [{ email }, { username }] 
-    });
-    
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: existingUser.email === email ? 'Email already exists' : 'Username already exists'
-      });
-    }
-    
-    // Create new user
-    const userData = {
-      username,
-      email,
-      password,
-      userType,
-      phone: phone || '',
-      fullname: fullname || username,
-      isVerified: true,
-      isActive: true
-    };
-
-    // Add specializations for non-admin users
-    if (userType !== 'admin' && specializations) {
-      userData.specializations = specializations;
-    }
-    
-    const user = new User(userData);
-    await user.save();
-    
-    // Populate specializations before returning
-    await user.populate('specializations', 'name description color');
-    
-    res.status(201).json({
-      success: true,
-      message: 'User created successfully',
-      data: { user: user.toObject({ hide: 'password' }) }
-    });
-  } catch (error) {
-    console.error('Create user error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error creating user'
-    });
-  }
-});
-
-/**
- * @swagger
- * /api/admin/categories:
- *   get:
- *     summary: Get all categories with filtering
- *     tags: [Admin Operations]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: parentCategory
- *         schema:
- *           type: string
- *         description: Parent category ID or 'null' for root categories
+ *         description: Number of categories per page
  *       - in: query
  *         name: search
  *         schema:
  *           type: string
  *         description: Search term for category name
+ *       - in: query
+ *         name: isActive
+ *         schema:
+ *           type: string
+ *           enum: [all, true, false]
+ *         description: Filter by active status
  *     responses:
  *       200:
  *         description: Categories retrieved successfully
@@ -655,49 +175,108 @@ router.post('/users', async (req, res) => {
  *       500:
  *         description: Server error
  */
-router.get('/categories', async (req, res) => {
+router.get('/categories', auth, isAdmin, async (req, res) => {
   try {
-    const { parentCategory, search = '' } = req.query;
-    
-    let filter = {};
-    
-    // Filter by parent category
-    if (parentCategory === 'null') {
-      filter.parentCategory = null;
-    } else if (parentCategory) {
-      filter.parentCategory = parentCategory;
-    }
-    
-    // Add search filter
+    const { page = 1, limit = 10, search = '', isActive = 'all' } = req.query;
+    const skip = (page - 1) * limit;
+
+    // Build filter object
+    const filter = {};
+    if (isActive !== 'all') filter.isActive = isActive === 'true';
     if (search) {
       filter.name = { $regex: search, $options: 'i' };
     }
-    
+
     const categories = await Category.find(filter)
       .populate('parentCategory', 'name')
       .populate('subcategories', 'name')
       .sort({ sortOrder: 1, name: 1 });
-    
+
     res.json({
       success: true,
       data: { categories }
     });
   } catch (error) {
     console.error('Get categories error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching categories' 
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching categories'
     });
   }
 });
 
-// @route   POST /api/admin/categories
-// @desc    Create new category
-// @access  Private/Admin
-router.post('/categories', async (req, res) => {
+/**
+ * @swagger
+ * /api/admin/categories:
+ *   post:
+ *     summary: Create new category (Admin only)
+ *     description: Create a new service category
+ *     tags: [Categories - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Category name
+ *               description:
+ *                 type: string
+ *                 description: Category description
+ *               parentCategory:
+ *                 type: string
+ *                 description: Parent category ID (for subcategories)
+ *               icon:
+ *                 type: string
+ *                 description: Category icon
+ *               color:
+ *                 type: string
+ *                 description: Category color
+ *               isActive:
+ *                 type: boolean
+ *                 default: true
+ *               featured:
+ *                 type: boolean
+ *                 default: false
+ *               sortOrder:
+ *                 type: number
+ *                 default: 0
+ *     responses:
+ *       201:
+ *         description: Category created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     category:
+ *                       $ref: '#/components/schemas/Category'
+ *       400:
+ *         description: Bad request - Invalid data
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.post('/categories', auth, isAdmin, async (req, res) => {
   try {
     const { name, description, parentCategory, icon, color, isActive, featured, sortOrder } = req.body;
-    
+
     // Validate required fields
     if (!name || !name.trim()) {
       return res.status(400).json({
@@ -705,10 +284,10 @@ router.post('/categories', async (req, res) => {
         message: 'Category name is required'
       });
     }
-    
+
     // Convert empty string to null for parentCategory
     const parentCat = parentCategory === '' ? null : parentCategory;
-    
+
     const category = new Category({
       name: name.trim(),
       description: description.trim(),
@@ -719,9 +298,9 @@ router.post('/categories', async (req, res) => {
       featured,
       sortOrder
     });
-    
+
     await category.save();
-    
+
     // If this is a subcategory, add it to parent's subcategories
     if (parentCat) {
       const parent = await Category.findById(parentCat);
@@ -730,7 +309,7 @@ router.post('/categories', async (req, res) => {
         await parent.save();
       }
     }
-    
+
     res.status(201).json({
       success: true,
       message: 'Category created successfully',
@@ -738,31 +317,86 @@ router.post('/categories', async (req, res) => {
     });
   } catch (error) {
     console.error('Create category error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error creating category' 
+    res.status(500).json({
+      success: false,
+      message: 'Error creating category'
     });
   }
 });
 
-// @route   PUT /api/admin/categories/:id
-// @desc    Update category
-// @access  Private/Admin
-router.put('/categories/:id', async (req, res) => {
+/**
+ * @swagger
+ * /api/admin/categories/{id}:
+ *   put:
+ *     summary: Update category (Admin only)
+ *     description: Update an existing category
+ *     tags: [Categories - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Category ID
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Category name
+ *               description:
+ *                 type: string
+ *                 description: Category description
+ *               parentCategory:
+ *                 type: string
+ *                 description: Parent category ID (for subcategories)
+ *               icon:
+ *                 type: string
+ *                 description: Category icon
+ *               color:
+ *                 type: string
+ *                 description: Category color
+ *               isActive:
+ *                 type: boolean
+ *               featured:
+ *                 type: boolean
+ *               sortOrder:
+ *                 type: number
+ *     responses:
+ *       200:
+ *         description: Category updated successfully
+ *       400:
+ *         description: Bad request - Invalid data
+ *       404:
+ *         description: Category not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.put('/categories/:id', auth, isAdmin, async (req, res) => {
   try {
     const { name, description, parentCategory, icon, color, isActive, featured, sortOrder } = req.body;
-    
+
     const category = await Category.findById(req.params.id);
     if (!category) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Category not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Category not found'
       });
     }
-    
+
     // Convert empty string to null for parentCategory
     const parentCat = parentCategory === '' ? null : parentCategory;
-    
+
     // Update category fields
     if (name !== undefined) {
       if (!name || !name.trim()) {
@@ -773,18 +407,16 @@ router.put('/categories/:id', async (req, res) => {
       }
       category.name = name.trim();
     }
-    if (description !== undefined) {
-      category.description = description.trim();
-    }
+    if (description !== undefined) category.description = description.trim();
     if (parentCategory !== undefined) category.parentCategory = parentCat;
     if (icon !== undefined) category.icon = icon;
     if (color !== undefined) category.color = color;
     if (typeof isActive === 'boolean') category.isActive = isActive;
     if (typeof featured === 'boolean') category.featured = featured;
     if (sortOrder !== undefined) category.sortOrder = sortOrder;
-    
+
     await category.save();
-    
+
     res.json({
       success: true,
       message: 'Category updated successfully',
@@ -792,34 +424,61 @@ router.put('/categories/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Update category error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error updating category' 
+    res.status(500).json({
+      success: false,
+      message: 'Error updating category'
     });
   }
 });
 
-// @route   DELETE /api/admin/categories/:id
-// @desc    Delete category
-// @access  Private/Admin
-router.delete('/categories/:id', async (req, res) => {
+/**
+ * @swagger
+ * /api/admin/categories/{id}:
+ *   delete:
+ *     summary: Delete category (Admin only)
+ *     description: Delete a category. Cannot delete categories with subcategories.
+ *     tags: [Categories - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Category ID
+ *     responses:
+ *       200:
+ *         description: Category deleted successfully
+ *       400:
+ *         description: Bad request - Cannot delete category with subcategories
+ *       404:
+ *         description: Category not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.delete('/categories/:id', auth, isAdmin, async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
     if (!category) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Category not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Category not found'
       });
     }
-    
+
     // Check if category has subcategories
     if (category.subcategories && category.subcategories.length > 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Cannot delete category with subcategories' 
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete category with subcategories'
       });
     }
-    
+
     // Remove from parent's subcategories if it's a subcategory
     if (category.parentCategory) {
       const parent = await Category.findById(category.parentCategory);
@@ -828,18 +487,18 @@ router.delete('/categories/:id', async (req, res) => {
         await parent.save();
       }
     }
-    
+
     await Category.findByIdAndDelete(req.params.id);
-    
+
     res.json({
       success: true,
       message: 'Category deleted successfully'
     });
   } catch (error) {
     console.error('Delete category error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error deleting category' 
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting category'
     });
   }
 });
@@ -848,7 +507,8 @@ router.delete('/categories/:id', async (req, res) => {
  * @swagger
  * /api/admin/consultations:
  *   get:
- *     summary: Get all consultations with filtering
+ *     summary: Get all consultations with filtering (Admin only)
+ *     description: Retrieve all consultations with filtering and search capabilities
  *     tags: [Admin Operations]
  *     security:
  *       - bearerAuth: []
@@ -887,20 +547,23 @@ router.delete('/categories/:id', async (req, res) => {
  *                 success:
  *                   type: boolean
  *                 data:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Consultation'
- *                 pagination:
  *                   type: object
  *                   properties:
- *                     current:
- *                       type: integer
- *                     total:
- *                       type: integer
- *                     hasNext:
- *                       type: boolean
- *                     hasPrev:
- *                       type: boolean
+ *                     consultations:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Consultation'
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         currentPage:
+ *                           type: integer
+ *                         totalPages:
+ *                           type: integer
+ *                         totalConsultations:
+ *                           type: integer
+ *                         limit:
+ *                           type: integer
  *       401:
  *         description: Unauthorized
  *       403:
@@ -908,17 +571,17 @@ router.delete('/categories/:id', async (req, res) => {
  *       500:
  *         description: Server error
  */
-router.get('/consultations', async (req, res) => {
+router.get('/consultations', auth, isAdmin, async (req, res) => {
   try {
     const { page = 1, limit = 10, search = '', status = '', type = '', category = '' } = req.query;
     const skip = (page - 1) * limit;
-    
+
     // Build filter object
     const filter = {};
     if (status && status !== 'all') filter.status = status;
     if (type && type !== 'all') filter.consultationType = type;
     if (category && category !== 'all') filter.category = category;
-    
+
     // Build search query
     let searchQuery = {};
     if (search) {
@@ -929,10 +592,10 @@ router.get('/consultations', async (req, res) => {
         ]
       };
     }
-    
+
     // Combine filters
     const finalFilter = { ...filter, ...searchQuery };
-    
+
     // Get consultations with pagination
     const consultations = await Consultation.find(finalFilter)
       .populate('seeker', 'fullname email')
@@ -941,11 +604,11 @@ router.get('/consultations', async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
-    
+
     // Get total count for pagination
     const totalConsultations = await Consultation.countDocuments(finalFilter);
     const totalPages = Math.ceil(totalConsultations / limit);
-    
+
     res.json({
       success: true,
       data: {
@@ -960,66 +623,147 @@ router.get('/consultations', async (req, res) => {
     });
   } catch (error) {
     console.error('Get consultations error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching consultations' 
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching consultations'
     });
   }
 });
 
-// @route   GET /api/admin/consultations/:id
-// @desc    Get consultation by ID
-// @access  Private/Admin
-router.get('/consultations/:id', async (req, res) => {
+/**
+ * @swagger
+ * /api/admin/consultations/{id}:
+ *   get:
+ *     summary: Get consultation by ID (Admin only)
+ *     description: Retrieve a specific consultation by ID
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Consultation ID
+ *     responses:
+ *       200:
+ *         description: Consultation retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     consultation:
+ *                       $ref: '#/components/schemas/Consultation'
+ *       404:
+ *         description: Consultation not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.get('/consultations/:id', auth, isAdmin, async (req, res) => {
   try {
     const consultation = await Consultation.findById(req.params.id)
       .populate('seeker', 'fullname email phone')
       .populate('provider', 'fullname email phone specialization')
       .populate('category', 'name');
-    
+
     if (!consultation) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Consultation not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Consultation not found'
       });
     }
-    
+
     res.json({
       success: true,
       data: { consultation }
     });
   } catch (error) {
     console.error('Get consultation error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching consultation' 
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching consultation'
     });
   }
 });
 
-// @route   PUT /api/admin/consultations/:id
-// @desc    Update consultation
-// @access  Private/Admin
-router.put('/consultations/:id', async (req, res) => {
+/**
+ * @swagger
+ * /api/admin/consultations/{id}:
+ *   put:
+ *     summary: Update consultation (Admin only)
+ *     description: Update consultation details
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Consultation ID
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [pending, accepted, in-progress, completed, cancelled]
+ *               notes:
+ *                 type: string
+ *                 description: Admin notes
+ *               seekerNotes:
+ *                 type: string
+ *                 description: Notes for seeker
+ *               providerNotes:
+ *                 type: string
+ *                 description: Notes for provider
+ *     responses:
+ *       200:
+ *         description: Consultation updated successfully
+ *       404:
+ *         description: Consultation not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.put('/consultations/:id', auth, isAdmin, async (req, res) => {
   try {
     const { status, notes, seekerNotes, providerNotes } = req.body;
-    
+
     const consultation = await Consultation.findById(req.params.id);
     if (!consultation) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Consultation not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Consultation not found'
       });
     }
-    
+
     // Update consultation fields
     if (status) consultation.status = status;
     if (notes !== undefined) consultation.notes = notes;
     if (seekerNotes !== undefined) consultation.seekerNotes = seekerNotes;
     if (providerNotes !== undefined) consultation.providerNotes = providerNotes;
-    
+
     await consultation.save();
-    
+
     res.json({
       success: true,
       message: 'Consultation updated successfully',
@@ -1027,31 +771,68 @@ router.put('/consultations/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Update consultation error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error updating consultation' 
+    res.status(500).json({
+      success: false,
+      message: 'Error updating consultation'
     });
   }
 });
 
-// @route   PUT /api/admin/consultations/:id/status
-// @desc    Update consultation status
-// @access  Private/Admin
-router.put('/consultations/:id/status', async (req, res) => {
+/**
+ * @swagger
+ * /api/admin/consultations/{id}/status:
+ *   put:
+ *     summary: Update consultation status (Admin only)
+ *     description: Update only the status of a consultation
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Consultation ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [pending, accepted, in-progress, completed, cancelled]
+ *     responses:
+ *       200:
+ *         description: Consultation status updated successfully
+ *       404:
+ *         description: Consultation not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.put('/consultations/:id/status', auth, isAdmin, async (req, res) => {
   try {
     const { status } = req.body;
-    
+
     const consultation = await Consultation.findById(req.params.id);
     if (!consultation) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Consultation not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Consultation not found'
       });
     }
-    
+
     consultation.status = status;
     await consultation.save();
-    
+
     res.json({
       success: true,
       message: 'Consultation status updated successfully',
@@ -1059,37 +840,62 @@ router.put('/consultations/:id/status', async (req, res) => {
     });
   } catch (error) {
     console.error('Update consultation status error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error updating consultation status' 
+    res.status(500).json({
+      success: false,
+      message: 'Error updating consultation status'
     });
   }
 });
 
-// @route   DELETE /api/admin/consultations/:id
-// @desc    Delete consultation
-// @access  Private/Admin
-router.delete('/consultations/:id', async (req, res) => {
+/**
+ * @swagger
+ * /api/admin/consultations/{id}:
+ *   delete:
+ *     summary: Delete consultation (Admin only)
+ *     description: Delete a consultation
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Consultation ID
+ *     responses:
+ *       200:
+ *         description: Consultation deleted successfully
+ *       404:
+ *         description: Consultation not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.delete('/consultations/:id', auth, isAdmin, async (req, res) => {
   try {
     const consultation = await Consultation.findById(req.params.id);
     if (!consultation) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Consultation not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Consultation not found'
       });
     }
-    
+
     await Consultation.findByIdAndDelete(req.params.id);
-    
+
     res.json({
       success: true,
       message: 'Consultation deleted successfully'
     });
   } catch (error) {
     console.error('Delete consultation error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error deleting consultation' 
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting consultation'
     });
   }
 });
@@ -1098,8 +904,9 @@ router.delete('/consultations/:id', async (req, res) => {
  * @swagger
  * /api/admin/payments:
  *   get:
- *     summary: Get all payments with filtering
- *     tags: [Admin Operations]
+ *     summary: Get all payments with filtering (Admin only)
+ *     description: Retrieve all payments with filtering and search capabilities
+ *     tags: [Payments - Admin]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1137,20 +944,23 @@ router.delete('/consultations/:id', async (req, res) => {
  *                 success:
  *                   type: boolean
  *                 data:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Payment'
- *                 pagination:
  *                   type: object
  *                   properties:
- *                     current:
- *                       type: integer
- *                     total:
- *                       type: integer
- *                     hasNext:
- *                       type: boolean
- *                     hasPrev:
- *                       type: boolean
+ *                     payments:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Payment'
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         currentPage:
+ *                           type: integer
+ *                         totalPages:
+ *                           type: integer
+ *                         totalPayments:
+ *                           type: integer
+ *                         limit:
+ *                           type: integer
  *       401:
  *         description: Unauthorized
  *       403:
@@ -1158,16 +968,16 @@ router.delete('/consultations/:id', async (req, res) => {
  *       500:
  *         description: Server error
  */
-router.get('/payments', async (req, res) => {
+router.get('/payments', auth, isAdmin, async (req, res) => {
   try {
     const { page = 1, limit = 10, search = '', status = '', method = '' } = req.query;
     const skip = (page - 1) * limit;
-    
+
     // Build filter object
     const filter = {};
     if (status && status !== 'all') filter.status = status;
     if (method && method !== 'all') filter.paymentMethod = method;
-    
+
     // Build search query
     let searchQuery = {};
     if (search) {
@@ -1178,10 +988,10 @@ router.get('/payments', async (req, res) => {
         ]
       };
     }
-    
+
     // Combine filters
     const finalFilter = { ...filter, ...searchQuery };
-    
+
     // Get payments with pagination
     const payments = await Payment.find(finalFilter)
       .populate('consultation', 'title consultationType')
@@ -1190,11 +1000,11 @@ router.get('/payments', async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
-    
+
     // Get total count for pagination
     const totalPayments = await Payment.countDocuments(finalFilter);
     const totalPages = Math.ceil(totalPayments / limit);
-    
+
     res.json({
       success: true,
       data: {
@@ -1209,64 +1019,139 @@ router.get('/payments', async (req, res) => {
     });
   } catch (error) {
     console.error('Get payments error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching payments' 
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching payments'
     });
   }
 });
 
-// @route   GET /api/admin/payments/:id
-// @desc    Get payment by ID
-// @access  Private/Admin
-router.get('/payments/:id', async (req, res) => {
+/**
+ * @swagger
+ * /api/admin/payments/{id}:
+ *   get:
+ *     summary: Get payment by ID (Admin only)
+ *     description: Retrieve a specific payment by ID
+ *     tags: [Payments - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Payment ID
+ *     responses:
+ *       200:
+ *         description: Payment retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     payment:
+ *                       $ref: '#/components/schemas/Payment'
+ *       404:
+ *         description: Payment not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.get('/payments/:id', auth, isAdmin, async (req, res) => {
   try {
     const payment = await Payment.findById(req.params.id)
       .populate('consultation', 'title consultationType status')
       .populate('seeker', 'fullname email phone')
       .populate('provider', 'fullname email phone');
-    
+
     if (!payment) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Payment not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found'
       });
     }
-    
+
     res.json({
       success: true,
       data: { payment }
     });
   } catch (error) {
     console.error('Get payment error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching payment' 
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching payment'
     });
   }
 });
 
-// @route   PUT /api/admin/payments/:id
-// @desc    Update payment
-// @access  Private/Admin
-router.put('/payments/:id', async (req, res) => {
+/**
+ * @swagger
+ * /api/admin/payments/{id}:
+ *   put:
+ *     summary: Update payment (Admin only)
+ *     description: Update payment details
+ *     tags: [Payments - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Payment ID
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [pending, completed, failed, cancelled, refunded]
+ *               notes:
+ *                 type: string
+ *                 description: Admin notes
+ *     responses:
+ *       200:
+ *         description: Payment updated successfully
+ *       404:
+ *         description: Payment not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.put('/payments/:id', auth, isAdmin, async (req, res) => {
   try {
     const { status, notes } = req.body;
-    
+
     const payment = await Payment.findById(req.params.id);
     if (!payment) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Payment not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found'
       });
     }
-    
+
     // Update payment fields
     if (status) payment.status = status;
     if (notes !== undefined) payment.notes = notes;
-    
+
     await payment.save();
-    
+
     res.json({
       success: true,
       message: 'Payment updated successfully',
@@ -1274,39 +1159,66 @@ router.put('/payments/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Update payment error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error updating payment' 
+    res.status(500).json({
+      success: false,
+      message: 'Error updating payment'
     });
   }
 });
 
-// @route   PUT /api/admin/payments/:id/refund
-// @desc    Refund payment
-// @access  Private/Admin
-router.put('/payments/:id/refund', async (req, res) => {
+/**
+ * @swagger
+ * /api/admin/payments/{id}/refund:
+ *   put:
+ *     summary: Refund payment (Admin only)
+ *     description: Process a refund for a completed payment
+ *     tags: [Payments - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Payment ID
+ *     responses:
+ *       200:
+ *         description: Payment refunded successfully
+ *       400:
+ *         description: Bad request - Only completed payments can be refunded
+ *       404:
+ *         description: Payment not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.put('/payments/:id/refund', auth, isAdmin, async (req, res) => {
   try {
     const payment = await Payment.findById(req.params.id);
     if (!payment) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Payment not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found'
       });
     }
-    
+
     if (payment.status !== 'completed') {
       return res.status(400).json({
         success: false,
         message: 'Only completed payments can be refunded'
       });
     }
-    
+
     payment.status = 'refunded';
     payment.refundedAt = new Date();
     payment.refundAmount = payment.amount;
-    
+
     await payment.save();
-    
+
     res.json({
       success: true,
       message: 'Payment refunded successfully',
@@ -1314,37 +1226,62 @@ router.put('/payments/:id/refund', async (req, res) => {
     });
   } catch (error) {
     console.error('Refund payment error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error refunding payment' 
+    res.status(500).json({
+      success: false,
+      message: 'Error refunding payment'
     });
   }
 });
 
-// @route   DELETE /api/admin/payments/:id
-// @desc    Delete payment
-// @access  Private/Admin
-router.delete('/payments/:id', async (req, res) => {
+/**
+ * @swagger
+ * /api/admin/payments/{id}:
+ *   delete:
+ *     summary: Delete payment (Admin only)
+ *     description: Delete a payment record
+ *     tags: [Payments - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Payment ID
+ *     responses:
+ *       200:
+ *         description: Payment deleted successfully
+ *       404:
+ *         description: Payment not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.delete('/payments/:id', auth, isAdmin, async (req, res) => {
   try {
     const payment = await Payment.findById(req.params.id);
     if (!payment) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Payment not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found'
       });
     }
-    
+
     await Payment.findByIdAndDelete(req.params.id);
-    
+
     res.json({
       success: true,
       message: 'Payment deleted successfully'
     });
   } catch (error) {
     console.error('Delete payment error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error deleting payment' 
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting payment'
     });
   }
 });
@@ -1430,13 +1367,13 @@ router.delete('/payments/:id', async (req, res) => {
  *       500:
  *         description: Server error
  */
-router.get('/questions', async (req, res) => {
+router.get('/questions', auth, isAdmin, async (req, res) => {
   try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      search = '', 
-      status = 'all', 
+    const {
+      page = 1,
+      limit = 10,
+      search = '',
+      status = 'all',
       priority = 'all',
       category = '',
       subcategory = ''
@@ -1446,27 +1383,27 @@ router.get('/questions', async (req, res) => {
 
     // Build query
     const query = {};
-    
+
     // Search in question description
     if (search) {
       query.description = { $regex: search, $options: 'i' };
     }
-    
+
     // Filter by status
     if (status !== 'all') {
       query.status = status;
     }
-    
+
     // Filter by priority
     if (priority !== 'all') {
       query.priority = priority;
     }
-    
+
     // Filter by category
     if (category) {
       query.category = category;
     }
-    
+
     // Filter by subcategory
     if (subcategory) {
       query.subcategory = subcategory;
@@ -1540,7 +1477,7 @@ router.get('/questions', async (req, res) => {
  *       500:
  *         description: Server error
  */
-router.get('/questions/:id', async (req, res) => {
+router.get('/questions/:id', auth, isAdmin, async (req, res) => {
   try {
     const question = await Question.findById(req.params.id)
       .populate('userId', 'fullname email profileImage')
@@ -1594,7 +1531,7 @@ router.get('/questions/:id', async (req, res) => {
  *       500:
  *         description: Server error
  */
-router.patch('/questions/:id/close', async (req, res) => {
+router.patch('/questions/:id/close', auth, isAdmin, async (req, res) => {
   try {
     const question = await Question.findById(req.params.id);
 
@@ -1656,7 +1593,7 @@ router.patch('/questions/:id/close', async (req, res) => {
  *       500:
  *         description: Server error
  */
-router.delete('/questions/:id', async (req, res) => {
+router.delete('/questions/:id', auth, isAdmin, async (req, res) => {
   try {
     const question = await Question.findById(req.params.id);
 

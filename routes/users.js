@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { auth, isAdmin } = require('../middleware/auth');
 const User = require('../models/User');
+const Category = require('../models/Category');
 
 /**
  * @swagger
@@ -25,142 +26,17 @@ const User = require('../models/User');
  *               properties:
  *                 currentPage:
  *                   type: number
- *                   description: Current page number
+ *                   example: 1
  *                 totalPages:
  *                   type: number
- *                   description: Total number of pages
+ *                   example: 5
  *                 totalUsers:
  *                   type: number
- *                   description: Total number of users
+ *                   example: 50
  *                 limit:
  *                   type: number
- *                   description: Number of users per page
- *     UserQueryParams:
- *       type: object
- *       properties:
- *         page:
- *           type: number
- *           description: Page number, default is 1
- *         limit:
- *           type: number
- *           description: Number of users per page, default is 10
- *         search:
- *           type: string
- *           description: Search term for name, email, or username
- *         userType:
- *           type: string
- *           enum: [all, admin, seeker, provider]
- *           description: Filter by user type
- *         status:
- *           type: string
- *           enum: [all, verified, unverified, active, inactive]
- *           description: Filter by user status
+ *                   example: 10
  */
-
-/**
- * @swagger
- * /api/users/public:
- *   get:
- *     summary: Get all users except admins (Public)
- *     description: Retrieve list of all users except admins - accessible to all users
- *     tags: [Users]
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: number
- *           default: 1
- *         description: Page number
- *       - in: query
- *         name: limit
- *         schema:
- *           type: number
- *           default: 10
- *         description: Number of users per page
- *       - in: query
- *         name: search
- *         schema:
- *           type: string
- *         description: Search term for name, email, or username
- *       - in: query
- *         name: userType
- *         schema:
- *           type: string
- *           enum: [all, seeker, provider]
- *           default: all
- *         description: Filter by user type (excludes admin)
- *     responses:
- *       200:
- *         description: Users retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/PublicUsersResponse'
- *       500:
- *         description: Internal server error
- */
-// @route   GET /api/users/public
-// @desc    Get all users except admins (public access)
-// @access  Public
-router.get('/public', async (req, res) => {
-  try {
-    const { page = 1, limit = 10, search = '', userType = 'all' } = req.query;
-    const skip = (page - 1) * limit;
-    
-    // Build filter object - exclude admins
-    const filter = { userType: { $ne: 'admin' } };
-    
-    // Add userType filter if specified
-    if (userType && userType !== 'all') {
-      filter.userType = userType;
-    }
-    
-    // Build search query
-    let searchQuery = {};
-    if (search) {
-      searchQuery = {
-        $or: [
-          { fullname: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } },
-          { username: { $regex: search, $options: 'i' } }
-        ]
-      };
-    }
-    
-    // Combine filters
-    const finalFilter = { ...filter, ...searchQuery };
-    
-    // Get users with pagination
-    const users = await User.find(finalFilter)
-      .select('-password -resetPasswordToken -resetPasswordExpire')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
-    
-    // Get total count for pagination
-    const totalUsers = await User.countDocuments(finalFilter);
-    const totalPages = Math.ceil(totalUsers / limit);
-    
-    res.json({
-      success: true,
-      data: {
-        users,
-        pagination: {
-          currentPage: parseInt(page),
-          totalPages,
-          totalUsers,
-          limit: parseInt(limit)
-        }
-      }
-    });
-  } catch (error) {
-    console.error('Get public users error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching users' 
-    });
-  }
-});
 
 /**
  * @swagger
@@ -168,39 +44,45 @@ router.get('/public', async (req, res) => {
  *   get:
  *     summary: Get all users (Admin only)
  *     description: Retrieve paginated list of all users with filtering and search capabilities
- *     tags: [Users]
+ *     tags: [Users - Admin]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: page
  *         schema:
- *           type: number
+ *           type: integer
  *           default: 1
  *         description: Page number
  *       - in: query
  *         name: limit
  *         schema:
- *           type: number
+ *           type: integer
  *           default: 10
  *         description: Number of users per page
  *       - in: query
  *         name: search
  *         schema:
  *           type: string
- *         description: Search term for name, email, or username
+ *         description: Search term for user fullname or email
  *       - in: query
  *         name: userType
  *         schema:
  *           type: string
- *           enum: [all, admin, seeker, provider]
+ *           enum: [all, seeker, provider, admin]
  *         description: Filter by user type
  *       - in: query
- *         name: status
+ *         name: isActive
  *         schema:
  *           type: string
- *           enum: [all, verified, unverified, active, inactive]
- *         description: Filter by user status
+ *           enum: [all, true, false]
+ *         description: Filter by active status
+ *       - in: query
+ *         name: isVerified
+ *         schema:
+ *           type: string
+ *           enum: [all, true, false]
+ *         description: Filter by verification status
  *     responses:
  *       200:
  *         description: Users retrieved successfully
@@ -209,70 +91,58 @@ router.get('/public', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/UserListResponse'
  *       401:
- *         description: Unauthorized - invalid or missing token
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         description: Unauthorized
  *       403:
- *         description: Forbidden - admin access required
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         description: Forbidden - Admin access required
  *       500:
- *         description: Internal server error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         description: Server error
  */
-// @route   GET /api/users
-// @desc    Get all users (admin only)
-// @access  Private/Admin
 router.get('/', auth, isAdmin, async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = '', userType = '', status = '' } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      search = '',
+      userType = 'all',
+      isActive = 'all',
+      isVerified = 'all'
+    } = req.query;
+
     const skip = (page - 1) * limit;
-    
+
     // Build filter object
     const filter = {};
-    if (userType && userType !== 'all') {
-      filter.userType = userType;
-    }
-    if (status && status !== 'all') {
-      if (status === 'verified') filter.isVerified = true;
-      else if (status === 'unverified') filter.isVerified = false;
-      else if (status === 'active') filter.isActive = true;
-      else if (status === 'inactive') filter.isActive = false;
-    }
     
+    if (userType !== 'all') filter.userType = userType;
+    if (isActive !== 'all') filter.isActive = isActive === 'true';
+    if (isVerified !== 'all') filter.isVerified = isVerified === 'true';
+
     // Build search query
     let searchQuery = {};
     if (search) {
       searchQuery = {
         $or: [
           { fullname: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } },
-          { username: { $regex: search, $options: 'i' } }
+          { email: { $regex: search, $options: 'i' } }
         ]
       };
     }
-    
+
     // Combine filters
     const finalFilter = { ...filter, ...searchQuery };
-    
+
     // Get users with pagination
     const users = await User.find(finalFilter)
+      .populate('specializations', 'name description color')
       .select('-password')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
-    
+
     // Get total count for pagination
     const totalUsers = await User.countDocuments(finalFilter);
     const totalPages = Math.ceil(totalUsers / limit);
-    
+
     res.json({
       success: true,
       data: {
@@ -287,9 +157,9 @@ router.get('/', auth, isAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Get users error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching users' 
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching users'
     });
   }
 });
@@ -298,9 +168,9 @@ router.get('/', auth, isAdmin, async (req, res) => {
  * @swagger
  * /api/users/{id}:
  *   get:
- *     summary: Get user by ID
- *     description: Get user profile by ID, admin or own profile only
- *     tags: [Users]
+ *     summary: Get user by ID (Admin only)
+ *     description: Retrieve a specific user by ID with full details
+ *     tags: [Users - Admin]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -320,70 +190,42 @@ router.get('/', auth, isAdmin, async (req, res) => {
  *               properties:
  *                 success:
  *                   type: boolean
- *                   example: true
  *                 data:
  *                   type: object
  *                   properties:
  *                     user:
  *                       $ref: '#/components/schemas/User'
- *       401:
- *         description: Unauthorized - invalid or missing token
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       403:
- *         description: Forbidden - access denied
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: User not found
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
  *       500:
- *         description: Internal server error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         description: Server error
  */
-// @route   GET /api/users/:id
-// @desc    Get user by ID (admin or own profile)
-// @access  Private
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, isAdmin, async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
-      .select('-password')
-      .populate('specializations', 'name description color');
-    
+      .populate('specializations', 'name description color')
+      .select('-password');
+
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
       });
     }
-    
-    // Check if user is requesting their own profile or is admin
-    if (req.userProfile._id.toString() !== req.params.id && req.userProfile.userType !== 'admin') {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Access denied' 
-      });
-    }
-    
+
     res.json({
       success: true,
       data: { user }
     });
   } catch (error) {
     console.error('Get user error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching user' 
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching user'
     });
   }
 });
@@ -392,9 +234,9 @@ router.get('/:id', auth, async (req, res) => {
  * @swagger
  * /api/users/{id}:
  *   put:
- *     summary: Update user profile
- *     description: Update user information including specializations. Users can update their own profile, admins can update any user. Specializations are required for seekers and providers, but not for admin users.
- *     tags: [User Management]
+ *     summary: Update user (Admin only)
+ *     description: Update user information including admin-only fields
+ *     tags: [Users - Admin]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -405,20 +247,43 @@ router.get('/:id', auth, async (req, res) => {
  *           type: string
  *         description: User ID
  *     requestBody:
- *       required: true
+ *       required: false
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/AdminUpdateUserRequest'
+ *             type: object
+ *             properties:
+ *               fullname:
+ *                 type: string
+ *                 description: User's full name
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User's email address
+ *               phone:
+ *                 type: string
+ *                 description: User's phone number
+ *               profileImage:
+ *                 type: string
+ *                 description: Profile image URL
+ *               userType:
+ *                 type: string
+ *                 enum: [seeker, provider, admin]
+ *                 description: User type (admin only)
+ *               isVerified:
+ *                 type: boolean
+ *                 description: Verification status (admin only)
+ *               isActive:
+ *                 type: boolean
+ *                 description: Active status (admin only)
+ *               specializations:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Array of specialization category IDs
  *     responses:
  *       200:
  *         description: User updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/AdminUserResponse'
- *       400:
- *         description: Bad request - validation errors
  *         content:
  *           application/json:
  *             schema:
@@ -426,79 +291,72 @@ router.get('/:id', auth, async (req, res) => {
  *               properties:
  *                 success:
  *                   type: boolean
- *                   example: false
  *                 message:
  *                   type: string
- *                   example: "Specializations are required for seekers and providers"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
+ *       400:
+ *         description: Bad request - Invalid data
+ *       404:
+ *         description: User not found
  *       401:
  *         description: Unauthorized
  *       403:
- *         description: Forbidden - Access denied
- *       404:
- *         description: User not found
+ *         description: Forbidden - Admin access required
  *       500:
  *         description: Server error
  */
-// @route   PUT /api/users/:id
-// @desc    Update user (admin or own profile)
-// @access  Private
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, isAdmin, async (req, res) => {
   try {
-    const { fullname, email, userType, isVerified, isActive, phone, profileImage, specializations } = req.body;
-    
+    const {
+      fullname,
+      email,
+      phone,
+      profileImage,
+      userType,
+      isVerified,
+      isActive,
+      specializations
+    } = req.body;
+
     const user = await User.findById(req.params.id);
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
       });
     }
-    
-    // Check if user is updating their own profile or is admin
-    if (req.userProfile._id.toString() !== req.params.id && req.userProfile.userType !== 'admin') {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Access denied' 
-      });
-    }
-    
-    // Only admin can update userType, verification status, and active status
-    if (req.userProfile.userType !== 'admin') {
-      delete req.body.userType;
-      delete req.body.isVerified;
-      delete req.body.isActive;
+
+    // Validate email uniqueness if email is being updated
+    if (email && email !== user.email) {
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email already exists'
+        });
+      }
     }
 
     // Validate specializations if provided
-    if (specializations !== undefined) {
-      // If userType is being changed to admin, specializations are not required
-      if (userType === 'admin') {
-        user.specializations = [];
-      } else {
-        // For seekers and providers, specializations are required
-        if (!Array.isArray(specializations) || specializations.length === 0) {
-          return res.status(400).json({
-            success: false,
-            message: 'Specializations are required for seekers and providers'
-          });
-        }
+    if (specializations && Array.isArray(specializations)) {
+      const Category = require('../models/Category');
+      const categories = await Category.find({
+        _id: { $in: specializations },
+        isActive: true
+      });
 
-        // Validate specializations
-        const Category = require('../models/Category');
-        const categories = await Category.find({ 
-          _id: { $in: specializations }, 
-          isActive: true 
+      if (categories.length !== specializations.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'One or more specializations are invalid or inactive'
         });
-        
-        if (categories.length !== specializations.length) {
-          return res.status(400).json({
-            success: false,
-            message: 'One or more specializations are invalid or inactive'
-          });
-        }
       }
     }
-    
+
     // Update user fields
     if (fullname) user.fullname = fullname;
     if (email) user.email = email;
@@ -508,12 +366,12 @@ router.put('/:id', auth, async (req, res) => {
     if (phone !== undefined) user.phone = phone;
     if (profileImage !== undefined) user.profileImage = profileImage;
     if (specializations !== undefined) user.specializations = specializations;
-    
+
     await user.save();
-    
+
     // Populate specializations before returning
     await user.populate('specializations', 'name description color');
-    
+
     res.json({
       success: true,
       message: 'User updated successfully',
@@ -521,34 +379,70 @@ router.put('/:id', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Update user error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error updating user' 
+    res.status(500).json({
+      success: false,
+      message: 'Error updating user'
     });
   }
 });
 
-// @route   DELETE /api/users/:id
-// @desc    Delete user (admin only)
-// @access  Private/Admin
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   delete:
+ *     summary: Delete user (Admin only)
+ *     description: Delete a user account. Admin cannot delete their own account.
+ *     tags: [Users - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Bad request - Cannot delete own account
+ *       404:
+ *         description: User not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
 router.delete('/:id', auth, isAdmin, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
       });
     }
-    
+
     // Prevent admin from deleting themselves
     if (user._id.toString() === req.userProfile._id.toString()) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Cannot delete your own account' 
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete your own account'
       });
     }
-    
+
     await User.findByIdAndDelete(req.params.id);
     
     res.json({
@@ -557,9 +451,9 @@ router.delete('/:id', auth, isAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Delete user error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error deleting user' 
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting user'
     });
   }
 });

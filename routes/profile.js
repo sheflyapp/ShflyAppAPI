@@ -343,7 +343,7 @@ router.put('/phone', auth, async (req, res) => {
  * /api/profile/email:
  *   put:
  *     summary: Update email address
- *     tags: [Profile]
+ *     tags: [Users]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -423,7 +423,7 @@ router.put('/email', auth, async (req, res) => {
  * /api/profile/specialization:
  *   put:
  *     summary: Update provider specialization (providers only)
- *     tags: [Profile]
+ *     tags: [Users]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -498,7 +498,7 @@ router.put('/specialization', auth, async (req, res) => {
  * /api/profile/pricing:
  *   put:
  *     summary: Update provider pricing (providers only)
- *     tags: [Profile]
+ *     tags: [Users]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -564,7 +564,7 @@ router.put('/pricing', auth, async (req, res) => {
  * /api/profile/availability-settings:
  *   put:
  *     summary: Update availability settings (providers only)
- *     tags: [Profile]
+ *     tags: [Users]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -644,7 +644,7 @@ router.put('/availability-settings', auth, async (req, res) => {
  * /api/profile/deactivate:
  *   put:
  *     summary: Deactivate user account
- *     tags: [Profile]
+ *     tags: [Users]
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -675,7 +675,7 @@ router.put('/deactivate', auth, async (req, res) => {
  * /api/profile/activate:
  *   put:
  *     summary: Reactivate user account
- *     tags: [Profile]
+ *     tags: [Users]
  *     security:
  *       - bearerAuth: []
  *     responses:

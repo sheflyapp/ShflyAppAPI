@@ -9,7 +9,7 @@ const Transaction = require('../models/Transaction');
  * /api/wallet:
  *   get:
  *     summary: Get wallet balance and basic information
- *     tags: [Wallet]
+ *     tags: [Wallet - Common]
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -63,7 +63,7 @@ router.get('/', auth, async (req, res) => {
  * /api/wallet/add-funds:
  *   post:
  *     summary: Add funds to wallet
- *     tags: [Wallet]
+ *     tags: [Wallet - Common]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -173,7 +173,7 @@ router.post('/add-funds', auth, async (req, res) => {
  * /api/wallet/withdraw:
  *   post:
  *     summary: Withdraw funds from wallet
- *     tags: [Wallet]
+ *     tags: [Wallet - Common]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -289,7 +289,7 @@ router.post('/withdraw', auth, async (req, res) => {
  * /api/wallet/transactions:
  *   get:
  *     summary: Get wallet transaction history
- *     tags: [Wallet]
+ *     tags: [Wallet - Common]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -424,7 +424,7 @@ router.get('/transactions', auth, async (req, res) => {
  * /api/wallet/transactions/{id}:
  *   get:
  *     summary: Get specific transaction details
- *     tags: [Wallet]
+ *     tags: [Wallet - Common]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -488,7 +488,7 @@ router.get('/transactions/:id', auth, async (req, res) => {
  * /api/wallet/transfer:
  *   post:
  *     summary: Transfer funds to another user
- *     tags: [Wallet]
+ *     tags: [Wallet - Common]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
