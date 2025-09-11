@@ -263,6 +263,71 @@ const options = {
             updatedAt: { type: 'string', format: 'date-time' }
           }
         },
+        Question: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            userId: { type: 'string', description: 'Seeker user ID' },
+            category: { 
+              type: 'object',
+              properties: {
+                _id: { type: 'string' },
+                name: { type: 'string' },
+                description: { type: 'string' },
+                color: { type: 'string' },
+                icon: { type: 'string' }
+              },
+              description: 'Question category details'
+            },
+            subcategory: { 
+              type: 'object',
+              properties: {
+                _id: { type: 'string' },
+                name: { type: 'string' },
+                description: { type: 'string' },
+                color: { type: 'string' },
+                icon: { type: 'string' }
+              },
+              description: 'Question subcategory details'
+            },
+            description: { type: 'string', description: 'Question description' },
+            status: { 
+              type: 'string', 
+              enum: ['pending', 'answered', 'closed'],
+              description: 'Question status'
+            },
+            priority: { 
+              type: 'string', 
+              enum: ['low', 'medium', 'high', 'urgent'],
+              description: 'Question priority'
+            },
+            tags: { 
+              type: 'array', 
+              items: { type: 'string' },
+              description: 'Question tags'
+            },
+            attachments: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string' },
+                  description: { type: 'string' }
+                }
+              },
+              description: 'Question attachments'
+            },
+            isAnonymous: { type: 'boolean', description: 'Whether question is anonymous' },
+            isPublic: { type: 'boolean', description: 'Whether question is public' },
+            viewCount: { type: 'number', description: 'Number of views' },
+            answerCount: { type: 'number', description: 'Number of answers' },
+            lastActivityAt: { type: 'string', format: 'date-time' },
+            closedAt: { type: 'string', format: 'date-time' },
+            closedBy: { type: 'string', description: 'User who closed the question' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
+          }
+        },
         Error: {
           type: 'object',
           properties: {
@@ -331,11 +396,13 @@ const options = {
       { name: 'Wallet - Common', description: 'Wallet and transaction management (All users)' },
       { name: 'Reviews - Seeker', description: 'Review and rating system (Seekers only)' },
       { name: 'Availability - Provider', description: 'Provider availability scheduling (Providers only)' },
+      { name: 'Provider Questions', description: 'Question management for providers (Providers only)' },
       { name: 'Profile - Common', description: 'User profile management (All users)' }
     ]
   },
   apis: [
-    './routes/*.js'
+    './routes/*.js',
+    './swagger-templates.js'
   ]
 };
 

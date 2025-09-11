@@ -1440,6 +1440,177 @@
 
 /**
  * @swagger
+ * /api/providers/questions:
+ *   get:
+ *     summary: Get questions for providers
+ *     description: Get questions that match provider's specializations with pagination and filtering
+ *     tags: [Provider Questions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: number
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: number
+ *           default: 10
+ *         description: Number of questions per page
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [all, pending, answered, closed]
+ *           default: all
+ *         description: Filter by question status
+ *       - in: query
+ *         name: priority
+ *         schema:
+ *           type: string
+ *           enum: [all, low, medium, high, urgent]
+ *           default: all
+ *         description: Filter by question priority
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *           default: all
+ *         description: Filter by category ID
+ *       - in: query
+ *         name: subcategory
+ *         schema:
+ *           type: string
+ *           default: all
+ *         description: Filter by subcategory ID
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search in question description and tags
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [createdAt, lastActivityAt, priority, viewCount]
+ *           default: createdAt
+ *         description: Sort field
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Sort order
+ *     responses:
+ *       200:
+ *         description: Questions retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     questions:
+ *                       type: array
+ *                       items:
+ *                         allOf:
+ *                           - $ref: '#/components/schemas/Question'
+ *                           - type: object
+ *                             properties:
+ *                               userId:
+ *                                 allOf:
+ *                                   - $ref: '#/components/schemas/User'
+ *                                   - type: object
+ *                                     properties:
+ *                                       _id:
+ *                                         type: string
+ *                                       fullname:
+ *                                         type: string
+ *                                       username:
+ *                                         type: string
+ *                                       email:
+ *                                         type: string
+ *                                       profileImage:
+ *                                         type: string
+ *                                       bio:
+ *                                         type: string
+ *                                       country:
+ *                                         type: string
+ *                                       city:
+ *                                         type: string
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         currentPage:
+ *                           type: number
+ *                           example: 1
+ *                         totalPages:
+ *                           type: number
+ *                           example: 5
+ *                         totalQuestions:
+ *                           type: number
+ *                           example: 50
+ *                         limit:
+ *                           type: number
+ *                           example: 10
+ *                     stats:
+ *                       type: object
+ *                       properties:
+ *                         totalQuestions:
+ *                           type: number
+ *                           description: Total questions matching provider's specializations
+ *                         pendingQuestions:
+ *                           type: number
+ *                           description: Number of pending questions
+ *                         answeredQuestions:
+ *                           type: number
+ *                           description: Number of answered questions
+ *                         closedQuestions:
+ *                           type: number
+ *                           description: Number of closed questions
+ *                         urgentQuestions:
+ *                           type: number
+ *                           description: Number of urgent priority questions
+ *                         highPriorityQuestions:
+ *                           type: number
+ *                           description: Number of high priority questions
+ *       400:
+ *         description: Bad request - Provider must have specializations
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Forbidden - Only providers can access this endpoint
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+
+/**
+ * @swagger
  * /api/admin:
  *   get:
  *     summary: Admin dashboard data
