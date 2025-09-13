@@ -47,6 +47,7 @@ router.get('/', async (req, res) => {
     // Get providers with pagination
     const providers = await User.find(finalFilter)
       .select('-password')
+      .populate('specializations', 'name description color icon') // Populate specializations with category details
       .sort({ isVerified: -1, rating: -1, createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));

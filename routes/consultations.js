@@ -322,9 +322,43 @@ router.post('/', auth, isSeeker, async (req, res) => {
   }
 });
 
-// @route   GET /api/consultations/:id
-// @desc    Get consultation by ID
-// @access  Private
+/**
+ * @swagger
+ * /api/consultations/{id}:
+ *   get:
+ *     summary: Get consultation by ID
+ *     tags: [Consultations - Common]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Consultation ID
+ *     responses:
+ *       200:
+ *         description: Consultation retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     consultation:
+ *                       $ref: '#/components/schemas/Consultation'
+ *       404:
+ *         description: Consultation not found
+ *       403:
+ *         description: Access denied
+ *       500:
+ *         description: Server error
+ */
 router.get('/:id', auth, async (req, res) => {
   try {
     const consultation = await Consultation.findById(req.params.id)
@@ -363,9 +397,79 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-// @route   PUT /api/consultations/:id
-// @desc    Update consultation
-// @access  Private
+/**
+ * @swagger
+ * /api/consultations/{id}:
+ *   put:
+ *     summary: Update consultation
+ *     tags: [Consultations - Common]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Consultation ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [pending, accepted, in-progress, completed, cancelled, rejected]
+ *                 description: Consultation status
+ *               notes:
+ *                 type: string
+ *                 description: General notes (admin only)
+ *               seekerNotes:
+ *                 type: string
+ *                 description: Seeker notes
+ *               providerNotes:
+ *                 type: string
+ *                 description: Provider notes
+ *               startTime:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Consultation start time (provider only)
+ *               endTime:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Consultation end time (provider only)
+ *               rating:
+ *                 type: number
+ *                 description: Consultation rating (seeker only)
+ *               review:
+ *                 type: string
+ *                 description: Consultation review (seeker only)
+ *     responses:
+ *       200:
+ *         description: Consultation updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     consultation:
+ *                       $ref: '#/components/schemas/Consultation'
+ *       404:
+ *         description: Consultation not found
+ *       403:
+ *         description: Access denied
+ *       500:
+ *         description: Server error
+ */
 router.put('/:id', auth, async (req, res) => {
   try {
     const { status, notes, seekerNotes, providerNotes, startTime, endTime, rating, review } = req.body;
@@ -427,9 +531,42 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
-// @route   DELETE /api/consultations/:id
-// @desc    Delete consultation (admin only)
-// @access  Private/Admin
+/**
+ * @swagger
+ * /api/consultations/{id}:
+ *   delete:
+ *     summary: Delete consultation (admin only)
+ *     tags: [Consultations - Common]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Consultation ID
+ *     responses:
+ *       200:
+ *         description: Consultation deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Consultation not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
 router.delete('/:id', auth, isAdmin, async (req, res) => {
   try {
     const consultation = await Consultation.findById(req.params.id);

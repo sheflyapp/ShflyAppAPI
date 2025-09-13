@@ -1352,14 +1352,14 @@ router.delete('/payments/:id', auth, isAdmin, async (req, res) => {
  *                 pagination:
  *                   type: object
  *                   properties:
- *                     current:
+ *                     currentPage:
  *                       type: integer
- *                     total:
+ *                     totalPages:
  *                       type: integer
- *                     hasNext:
- *                       type: boolean
- *                     hasPrev:
- *                       type: boolean
+ *                     totalQuestions:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
  *       401:
  *         description: Unauthorized
  *       403:
@@ -1427,11 +1427,10 @@ router.get('/questions', auth, isAdmin, async (req, res) => {
       success: true,
       data: questions,
       pagination: {
-        current: parseInt(page),
-        total: totalPages,
+        currentPage: parseInt(page),
+        totalPages,
         totalQuestions,
-        hasNext: page < totalPages,
-        hasPrev: page > 1
+        limit: parseInt(limit)
       }
     });
 
@@ -1571,6 +1570,89 @@ router.patch('/questions/:id/close', auth, isAdmin, async (req, res) => {
 
 /**
  * @swagger
+ * /api/admin/questions/{id}/update:
+ *   patch:
+ *     summary: Update question status or priority (Admin only)
+ *     description: Update question status or priority
+ *     tags: [Admin Operations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Question ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [pending, answered, closed]
+ *                 description: Question status
+ *               priority:
+ *                 type: string
+ *                 enum: [low, medium, high, urgent]
+ *                 description: Question priority
+ *     responses:
+ *       200:
+ *         description: Question updated successfully
+ *       404:
+ *         description: Question not found
+ *       500:
+ *         description: Server error
+ */
+router.patch('/questions/:id/update', auth, isAdmin, async (req, res) => {
+  try {
+    const { status, priority } = req.body;
+
+    const question = await Question.findById(req.params.id);
+
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message: 'Question not found'
+      });
+    }
+
+    // Update status if provided
+    if (status) {
+      question.status = status;
+      if (status === 'closed') {
+        question.closedAt = new Date();
+        question.closedBy = req.user.id;
+      }
+    }
+
+    // Update priority if provided
+    if (priority) {
+      question.priority = priority;
+    }
+
+    await question.save();
+
+    res.json({
+      success: true,
+      message: 'Question updated successfully',
+      data: question
+    });
+
+  } catch (error) {
+    console.error('Update admin question error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating question'
+    });
+  }
+});
+
+/**
+ * @swagger
  * /api/admin/questions/{id}:
  *   delete:
  *     summary: Delete a question (Admin only)
@@ -1616,6 +1698,571 @@ router.delete('/questions/:id', auth, isAdmin, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error deleting question'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/admin/users:
+ *   get:
+ *     summary: Get all users with filtering (Admin only)
+ *     description: Retrieve all users with filtering and search capabilities for admin management
+ *     tags: [Users - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of users per page
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search term for user name, email, or username
+ *       - in: query
+ *         name: userType
+ *         schema:
+ *           type: string
+ *           enum: [all, admin, seeker, provider]
+ *           default: all
+ *         description: Filter by user type
+ *       - in: query
+ *         name: isActive
+ *         schema:
+ *           type: string
+ *           enum: [all, true, false]
+ *           default: all
+ *         description: Filter by active status
+ *       - in: query
+ *         name: isVerified
+ *         schema:
+ *           type: string
+ *           enum: [all, true, false]
+ *           default: all
+ *         description: Filter by verification status
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [createdAt, fullname, email, lastLogin]
+ *           default: createdAt
+ *         description: Sort field
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Sort order
+ *     responses:
+ *       200:
+ *         description: Users retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     users:
+ *                       type: array
+ *                       items:
+ *                         allOf:
+ *                           - $ref: '#/components/schemas/User'
+ *                           - type: object
+ *                             properties:
+ *                               password:
+ *                                 type: string
+ *                                 description: Password field is excluded from response
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         currentPage:
+ *                           type: integer
+ *                         totalPages:
+ *                           type: integer
+ *                         totalUsers:
+ *                           type: integer
+ *                         limit:
+ *                           type: integer
+ *                     stats:
+ *                       type: object
+ *                       properties:
+ *                         totalUsers:
+ *                           type: number
+ *                         totalSeekers:
+ *                           type: number
+ *                         totalProviders:
+ *                           type: number
+ *                         totalAdmins:
+ *                           type: number
+ *                         activeUsers:
+ *                           type: number
+ *                         verifiedUsers:
+ *                           type: number
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.get('/users', auth, isAdmin, async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      search = '',
+      userType = 'all',
+      isActive = 'all',
+      isVerified = 'all',
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const skip = (page - 1) * limit;
+
+    // Build filter object
+    const filter = {};
+    if (userType !== 'all') filter.userType = userType;
+    if (isActive !== 'all') filter.isActive = isActive === 'true';
+    if (isVerified !== 'all') filter.isVerified = isVerified === 'true';
+
+    // Build search query
+    let searchQuery = {};
+    if (search) {
+      searchQuery = {
+        $or: [
+          { fullname: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+          { username: { $regex: search, $options: 'i' } }
+        ]
+      };
+    }
+
+    // Combine filters
+    const finalFilter = { ...filter, ...searchQuery };
+
+    // Build sort object
+    const sortObj = {};
+    sortObj[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+    // Get users with pagination
+    const users = await User.find(finalFilter)
+      .select('-password') // Exclude password field
+      .populate('specializations', 'name description color icon') // Populate specializations with category details
+      .sort(sortObj)
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Get total count for pagination
+    const totalUsers = await User.countDocuments(finalFilter);
+    const totalPages = Math.ceil(totalUsers / limit);
+
+    // Get statistics
+    const stats = {
+      totalUsers: await User.countDocuments(),
+      totalSeekers: await User.countDocuments({ userType: 'seeker' }),
+      totalProviders: await User.countDocuments({ userType: 'provider' }),
+      totalAdmins: await User.countDocuments({ userType: 'admin' }),
+      activeUsers: await User.countDocuments({ isActive: true }),
+      verifiedUsers: await User.countDocuments({ isVerified: true })
+    };
+
+    res.json({
+      success: true,
+      data: {
+        users,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages,
+          totalUsers,
+          limit: parseInt(limit)
+        },
+        stats
+      }
+    });
+  } catch (error) {
+    console.error('Get admin users error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching users'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/admin/users/{id}:
+ *   get:
+ *     summary: Get user by ID (Admin only)
+ *     description: Retrieve a specific user by ID for admin management
+ *     tags: [Users - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       allOf:
+ *                         - $ref: '#/components/schemas/User'
+ *                         - type: object
+ *                           properties:
+ *                             password:
+ *                               type: string
+ *                               description: Password field is excluded from response
+ *       404:
+ *         description: User not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.get('/users/:id', auth, isAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+      .select('-password') // Exclude password field
+      .populate('specializations', 'name description color icon'); // Populate specializations with category details
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { user }
+    });
+  } catch (error) {
+    console.error('Get admin user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching user'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/admin/users/{id}:
+ *   put:
+ *     summary: Update user (Admin only)
+ *     description: Update user details as an admin
+ *     tags: [Users - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               fullname:
+ *                 type: string
+ *                 description: User full name
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User email
+ *               username:
+ *                 type: string
+ *                 description: Username
+ *               phone:
+ *                 type: string
+ *                 description: User phone number
+ *               userType:
+ *                 type: string
+ *                 enum: [admin, seeker, provider]
+ *                 description: User type
+ *               isActive:
+ *                 type: boolean
+ *                 description: Account active status
+ *               isVerified:
+ *                 type: boolean
+ *                 description: Account verification status
+ *               bio:
+ *                 type: string
+ *                 description: User bio
+ *               country:
+ *                 type: string
+ *                 description: User country
+ *               city:
+ *                 type: string
+ *                 description: User city
+ *               gender:
+ *                 type: string
+ *                 enum: [male, female, other]
+ *                 description: User gender
+ *               price:
+ *                 type: number
+ *                 description: Consultation price (for providers)
+ *               specializations:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Specialization category IDs (for providers) - will be populated with category details in response
+ *     responses:
+ *       200:
+ *         description: User updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       allOf:
+ *                         - $ref: '#/components/schemas/User'
+ *                         - type: object
+ *                           properties:
+ *                             password:
+ *                               type: string
+ *                               description: Password field is excluded from response
+ *       400:
+ *         description: Bad request - Invalid data
+ *       404:
+ *         description: User not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.put('/users/:id', auth, isAdmin, async (req, res) => {
+  try {
+    const {
+      fullname,
+      email,
+      username,
+      phone,
+      userType,
+      isActive,
+      isVerified,
+      bio,
+      country,
+      city,
+      gender,
+      price,
+      specializations
+    } = req.body;
+
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update user fields
+    if (fullname !== undefined) user.fullname = fullname;
+    if (email !== undefined) user.email = email;
+    if (username !== undefined) user.username = username;
+    if (phone !== undefined) user.phone = phone;
+    if (userType !== undefined) user.userType = userType;
+    if (typeof isActive === 'boolean') user.isActive = isActive;
+    if (typeof isVerified === 'boolean') user.isVerified = isVerified;
+    if (bio !== undefined) user.bio = bio;
+    if (country !== undefined) user.country = country;
+    if (city !== undefined) user.city = city;
+    if (gender !== undefined) user.gender = gender;
+    if (price !== undefined) user.price = price;
+    if (specializations !== undefined) user.specializations = specializations;
+
+    await user.save();
+
+    // Return user without password and with populated specializations
+    const updatedUser = await User.findById(req.params.id)
+      .select('-password')
+      .populate('specializations', 'name description color icon');
+
+    res.json({
+      success: true,
+      message: 'User updated successfully',
+      data: { user: updatedUser }
+    });
+  } catch (error) {
+    console.error('Update admin user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating user'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/admin/users/{id}/status:
+ *   patch:
+ *     summary: Update user status (Admin only)
+ *     description: Update user active or verification status
+ *     tags: [Users - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               isActive:
+ *                 type: boolean
+ *                 description: Account active status
+ *               isVerified:
+ *                 type: boolean
+ *                 description: Account verification status
+ *     responses:
+ *       200:
+ *         description: User status updated successfully
+ *       404:
+ *         description: User not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.patch('/users/:id/status', auth, isAdmin, async (req, res) => {
+  try {
+    const { isActive, isVerified } = req.body;
+
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update status fields
+    if (typeof isActive === 'boolean') user.isActive = isActive;
+    if (typeof isVerified === 'boolean') user.isVerified = isVerified;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'User status updated successfully',
+      data: { user }
+    });
+  } catch (error) {
+    console.error('Update user status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating user status'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/admin/users/{id}:
+ *   delete:
+ *     summary: Delete user (Admin only)
+ *     description: Delete a user account (soft delete by deactivating)
+ *     tags: [Users - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User deleted successfully
+ *       404:
+ *         description: User not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.delete('/users/:id', auth, isAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Soft delete by deactivating the user
+    user.isActive = false;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'User deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete admin user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting user'
     });
   }
 });

@@ -201,7 +201,7 @@ router.post('/', auth, async (req, res) => {
  * /api/chat/{conversationId}:
  *   get:
  *     summary: Get messages for a specific conversation
- *     tags: [Chat]
+ *     tags: [Chat - Common]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -301,7 +301,7 @@ router.get('/:conversationId', auth, async (req, res) => {
  * /api/chat/{conversationId}/mark-read:
  *   put:
  *     summary: Mark messages as read
- *     tags: [Chat]
+ *     tags: [Chat - Common]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -371,7 +371,7 @@ router.put('/:conversationId/mark-read', auth, async (req, res) => {
  * /api/chat/{conversationId}:
  *   delete:
  *     summary: Delete a conversation
- *     tags: [Chat]
+ *     tags: [Chat - Common]
  *     security:
  *       - bearerAuth: []
  *     parameters:

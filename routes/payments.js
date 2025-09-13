@@ -10,6 +10,7 @@ const User = require('../models/User');
  * /api/payments:
  *   get:
  *     summary: Get all payments (admin only)
+ *     description: Get payments with filtering and pagination (Admin only)
  *     tags: [Payments - Admin]
  *     security:
  *       - bearerAuth: []
@@ -141,6 +142,7 @@ router.get('/', auth, isAdmin, async (req, res) => {
  * /api/payments:
  *   post:
  *     summary: Create a new payment
+ *     description: Create a new payment for a consultation (Seekers only)
  *     tags: [Payments - Seeker]
  *     security:
  *       - bearerAuth: []
@@ -295,9 +297,46 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-// @route   GET /api/payments/:id
-// @desc    Get payment by ID
-// @access  Private
+/**
+ * @swagger
+ * /api/payments/{id}:
+ *   get:
+ *     summary: Get payment by ID
+ *     description: Get payment details by ID (Seeker/Provider/Admin access)
+ *     tags: [Payments - Seeker]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Payment ID
+ *     responses:
+ *       200:
+ *         description: Payment retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     payment:
+ *                       $ref: '#/components/schemas/Payment'
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Payment not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/:id', auth, async (req, res) => {
   try {
     const payment = await Payment.findById(req.params.id)
@@ -336,9 +375,68 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-// @route   PUT /api/payments/:id
-// @desc    Update payment
-// @access  Private
+/**
+ * @swagger
+ * /api/payments/{id}:
+ *   put:
+ *     summary: Update payment
+ *     description: Update payment details (Seeker/Provider/Admin access)
+ *     tags: [Payments - Seeker]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Payment ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [pending, completed, failed, cancelled]
+ *                 description: Payment status
+ *               notes:
+ *                 type: string
+ *                 description: Payment notes
+ *               transactionId:
+ *                 type: string
+ *                 description: External transaction ID
+ *               stripePaymentIntentId:
+ *                 type: string
+ *                 description: Stripe payment intent ID
+ *     responses:
+ *       200:
+ *         description: Payment updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     payment:
+ *                       $ref: '#/components/schemas/Payment'
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Payment not found
+ *       500:
+ *         description: Server error
+ */
 router.put('/:id', auth, async (req, res) => {
   try {
     const { status, notes, transactionId, stripePaymentIntentId } = req.body;
@@ -393,9 +491,45 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
-// @route   DELETE /api/payments/:id
-// @desc    Delete payment (admin only)
-// @access  Private/Admin
+/**
+ * @swagger
+ * /api/payments/{id}:
+ *   delete:
+ *     summary: Delete payment (admin only)
+ *     description: Delete a payment (Admin only)
+ *     tags: [Payments - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Payment ID
+ *     responses:
+ *       200:
+ *         description: Payment deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Cannot delete completed or processing payments
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       404:
+ *         description: Payment not found
+ *       500:
+ *         description: Server error
+ */
 router.delete('/:id', auth, isAdmin, async (req, res) => {
   try {
     const payment = await Payment.findById(req.params.id);
