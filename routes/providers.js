@@ -159,6 +159,165 @@ router.post('/', auth, isAdmin, async (req, res) => {
   }
 });
 
+// @route   GET /api/providers/questions
+// @desc    Get questions for providers based on their specializations
+// @access  Private/Provider
+router.get('/questions', auth, async (req, res) => {
+  try {
+    // Debug logging
+    console.log('Questions endpoint accessed by user:', {
+      userId: req.userProfile._id,
+      userType: req.userProfile.userType,
+      email: req.userProfile.email
+    });
+    
+    // Check if user is a provider
+    if (req.userProfile.userType !== 'provider') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only providers can access this endpoint.'
+      });
+    }
+
+    const {
+      page = 1,
+      limit = 10,
+      status = 'all',
+      priority = 'all',
+      category = 'all',
+      subcategory = 'all',
+      search = '',
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const skip = (page - 1) * limit;
+    const providerId = req.userProfile._id;
+
+    // Get provider's specializations
+    const provider = await User.findById(providerId).select('specializations');
+    if (!provider || !provider.specializations || provider.specializations.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Provider must have specializations to view questions.'
+      });
+    }
+
+    // Build filter object
+    const filter = {
+      isPublic: true,
+      $or: [
+        { category: { $in: provider.specializations } },
+        { subcategory: { $in: provider.specializations } }
+      ]
+    };
+
+    // Add status filter
+    if (status !== 'all') {
+      filter.status = status;
+    }
+
+    // Add priority filter
+    if (priority !== 'all') {
+      filter.priority = priority;
+    }
+
+    // Add category filter
+    if (category !== 'all') {
+      filter.category = category;
+    }
+
+    // Add subcategory filter
+    if (subcategory !== 'all') {
+      filter.subcategory = subcategory;
+    }
+
+    // Add search filter
+    if (search) {
+      filter.$and = [
+        {
+          $or: [
+            { description: { $regex: search, $options: 'i' } },
+            { tags: { $in: [new RegExp(search, 'i')] } }
+          ]
+        }
+      ];
+    }
+
+    // Build sort object
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    // Get questions with pagination
+    const questions = await Question.find(filter)
+      .populate('userId', 'fullname username email profileImage bio country city')
+      .populate('category', 'name description color icon')
+      .populate('subcategory', 'name description color icon')
+      .sort(sort)
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Get total count for pagination
+    const totalQuestions = await Question.countDocuments(filter);
+    const totalPages = Math.ceil(totalQuestions / limit);
+
+    // Get additional statistics
+    const stats = await Question.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalQuestions: { $sum: 1 },
+          pendingQuestions: {
+            $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] }
+          },
+          answeredQuestions: {
+            $sum: { $cond: [{ $eq: ['$status', 'answered'] }, 1, 0] }
+          },
+          closedQuestions: {
+            $sum: { $cond: [{ $eq: ['$status', 'closed'] }, 1, 0] }
+          },
+          urgentQuestions: {
+            $sum: { $cond: [{ $eq: ['$priority', 'urgent'] }, 1, 0] }
+          },
+          highPriorityQuestions: {
+            $sum: { $cond: [{ $eq: ['$priority', 'high'] }, 1, 0] }
+          }
+        }
+      }
+    ]);
+
+    const questionStats = stats.length > 0 ? stats[0] : {
+      totalQuestions: 0,
+      pendingQuestions: 0,
+      answeredQuestions: 0,
+      closedQuestions: 0,
+      urgentQuestions: 0,
+      highPriorityQuestions: 0
+    };
+
+    res.json({
+      success: true,
+      data: {
+        questions,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages,
+          totalQuestions,
+          limit: parseInt(limit)
+        },
+        stats: questionStats
+      }
+    });
+  } catch (error) {
+    console.error('Get provider questions error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching questions'
+    });
+  }
+});
+
 // @route   GET /api/providers/:id
 // @desc    Get provider by ID (public)
 // @access  Public
@@ -328,156 +487,6 @@ router.delete('/:id', auth, isAdmin, async (req, res) => {
   }
 });
 
-// @route   GET /api/providers/questions
-// @desc    Get questions for providers based on their specializations
-// @access  Private/Provider
-router.get('/questions', auth, async (req, res) => {
-  try {
-    // Check if user is a provider
-    if (req.userProfile.userType !== 'provider') {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied. Only providers can access this endpoint.'
-      });
-    }
 
-    const {
-      page = 1,
-      limit = 10,
-      status = 'all',
-      priority = 'all',
-      category = 'all',
-      subcategory = 'all',
-      search = '',
-      sortBy = 'createdAt',
-      sortOrder = 'desc'
-    } = req.query;
-
-    const skip = (page - 1) * limit;
-    const providerId = req.userProfile._id;
-
-    // Get provider's specializations
-    const provider = await User.findById(providerId).select('specializations');
-    if (!provider || !provider.specializations || provider.specializations.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Provider must have specializations to view questions.'
-      });
-    }
-
-    // Build filter object
-    const filter = {
-      isPublic: true,
-      $or: [
-        { category: { $in: provider.specializations } },
-        { subcategory: { $in: provider.specializations } }
-      ]
-    };
-
-    // Add status filter
-    if (status !== 'all') {
-      filter.status = status;
-    }
-
-    // Add priority filter
-    if (priority !== 'all') {
-      filter.priority = priority;
-    }
-
-    // Add category filter
-    if (category !== 'all') {
-      filter.category = category;
-    }
-
-    // Add subcategory filter
-    if (subcategory !== 'all') {
-      filter.subcategory = subcategory;
-    }
-
-    // Add search filter
-    if (search) {
-      filter.$and = [
-        {
-          $or: [
-            { description: { $regex: search, $options: 'i' } },
-            { tags: { $in: [new RegExp(search, 'i')] } }
-          ]
-        }
-      ];
-    }
-
-    // Build sort object
-    const sort = {};
-    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
-
-    // Get questions with pagination
-    const questions = await Question.find(filter)
-      .populate('userId', 'fullname username email profileImage bio country city')
-      .populate('category', 'name description color icon')
-      .populate('subcategory', 'name description color icon')
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    // Get total count for pagination
-    const totalQuestions = await Question.countDocuments(filter);
-    const totalPages = Math.ceil(totalQuestions / limit);
-
-    // Get additional statistics
-    const stats = await Question.aggregate([
-      { $match: filter },
-      {
-        $group: {
-          _id: null,
-          totalQuestions: { $sum: 1 },
-          pendingQuestions: {
-            $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] }
-          },
-          answeredQuestions: {
-            $sum: { $cond: [{ $eq: ['$status', 'answered'] }, 1, 0] }
-          },
-          closedQuestions: {
-            $sum: { $cond: [{ $eq: ['$status', 'closed'] }, 1, 0] }
-          },
-          urgentQuestions: {
-            $sum: { $cond: [{ $eq: ['$priority', 'urgent'] }, 1, 0] }
-          },
-          highPriorityQuestions: {
-            $sum: { $cond: [{ $eq: ['$priority', 'high'] }, 1, 0] }
-          }
-        }
-      }
-    ]);
-
-    const questionStats = stats.length > 0 ? stats[0] : {
-      totalQuestions: 0,
-      pendingQuestions: 0,
-      answeredQuestions: 0,
-      closedQuestions: 0,
-      urgentQuestions: 0,
-      highPriorityQuestions: 0
-    };
-
-    res.json({
-      success: true,
-      data: {
-        questions,
-        pagination: {
-          currentPage: parseInt(page),
-          totalPages,
-          totalQuestions,
-          limit: parseInt(limit)
-        },
-        stats: questionStats
-      }
-    });
-  } catch (error) {
-    console.error('Get provider questions error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching questions'
-    });
-  }
-});
 
 module.exports = router;
