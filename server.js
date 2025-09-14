@@ -179,6 +179,7 @@ app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/availability', require('./routes/availability'));
 app.use('/api/profile', require('./routes/profile'));
 app.use('/api/questions', require('./routes/questions'));
+app.use('/api/content', require('./routes/staticContent'));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
