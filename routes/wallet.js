@@ -136,12 +136,12 @@ router.post('/add-funds', auth, async (req, res) => {
     // Create transaction record
     const transaction = new Transaction({
       user: req.user.id,
-      type: 'deposit',
+      type: 'credit',
       amount,
       currency,
-      paymentMethod,
       description: description || `Added ${amount} ${currency} to wallet`,
-      status: 'completed'
+      status: 'completed',
+      notes: `Payment method: ${paymentMethod}`
     });
 
     await transaction.save();

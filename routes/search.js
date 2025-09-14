@@ -93,23 +93,23 @@ router.get('/', async (req, res) => {
     if (type === 'all' || type === 'providers') {
       const providers = await User.find({
         userType: 'provider',
-        isActive: true,
-        isVerified: true,
+        isActive: { $ne: false },
+        isVerified: { $ne: false },
         $or: [
           { fullname: searchQuery },
           { username: searchQuery },
           { bio: searchQuery }
         ]
       })
-      .populate('specialization', 'name')
+      .populate('specializations', 'name')
       .select('-password -resetPasswordToken -resetPasswordExpire')
       .skip(skip)
       .limit(limit);
 
       const totalProviders = await User.countDocuments({
         userType: 'provider',
-        isActive: true,
-        isVerified: true,
+        isActive: { $ne: false },
+        isVerified: { $ne: false },
         $or: [
           { fullname: searchQuery },
           { username: searchQuery },
@@ -192,7 +192,8 @@ router.get('/', async (req, res) => {
     console.error('Error in general search:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

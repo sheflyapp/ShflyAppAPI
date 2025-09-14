@@ -292,6 +292,70 @@ router.get('/:id', auth, async (req, res) => {
 
 /**
  * @swagger
+ * /api/notifications/mark-all-read:
+ *   put:
+ *     summary: Mark all notifications as read
+ *     tags: [Notifications - Common]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: All notifications marked as read
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     modifiedCount:
+ *                       type: number
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+// Mark all notifications as read
+router.put('/mark-all-read', auth, async (req, res) => {
+  try {
+    // Ensure user ID is a valid ObjectId
+    const userId = req.user.id;
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID not found'
+      });
+    }
+
+    const result = await Notification.updateMany(
+      { recipient: userId, isRead: false },
+      { isRead: true, readAt: new Date() }
+    );
+
+    res.json({
+      success: true,
+      message: 'All notifications marked as read',
+      data: {
+        modifiedCount: result.modifiedCount
+      }
+    });
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * @swagger
  * /api/notifications/{id}:
  *   put:
  *     summary: Mark notification as read
@@ -404,27 +468,6 @@ router.put('/:id', auth, async (req, res) => {
  *       500:
  *         description: Server error
  */
-// Mark all notifications as read
-router.put('/mark-all-read', auth, async (req, res) => {
-  try {
-    await Notification.updateMany(
-      { recipient: req.user.id, isRead: false },
-      { isRead: true, readAt: new Date() }
-    );
-
-    res.json({
-      success: true,
-      message: 'All notifications marked as read'
-    });
-  } catch (error) {
-    console.error('Error marking all notifications as read:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-});
-
 /**
  * @swagger
  * /api/notifications/{id}:
