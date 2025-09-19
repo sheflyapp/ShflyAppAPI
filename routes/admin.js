@@ -67,9 +67,9 @@ router.get('/dashboard', auth, isAdmin, async (req, res) => {
 
     // Get payment statistics
     const totalPayments = await Payment.countDocuments();
-    const completedPayments = await Payment.countDocuments({ status: 'completed' });
+    const completedPayments = await Payment.countDocuments({ status: 'success' });
     const totalRevenue = await Payment.aggregate([
-      { $match: { status: 'completed' } },
+      { $match: { status: 'success' } },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
 
@@ -926,7 +926,7 @@ router.delete('/consultations/:id', auth, isAdmin, async (req, res) => {
  *         name: status
  *         schema:
  *           type: string
- *           enum: [all, pending, completed, failed, cancelled]
+ *           enum: [all, pending, processing, success, failed, cancelled]
  *         description: Filter by payment status
  *       - in: query
  *         name: paymentMethod
@@ -994,9 +994,9 @@ router.get('/payments', auth, isAdmin, async (req, res) => {
 
     // Get payments with pagination
     const payments = await Payment.find(finalFilter)
-      .populate('consultation', 'title consultationType')
-      .populate('seeker', 'fullname email')
-      .populate('provider', 'fullname email')
+      .populate('questionId', 'description status')
+      .populate('seekerId', 'fullname email')
+      .populate('providerId', 'fullname email')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -1069,9 +1069,9 @@ router.get('/payments', auth, isAdmin, async (req, res) => {
 router.get('/payments/:id', auth, isAdmin, async (req, res) => {
   try {
     const payment = await Payment.findById(req.params.id)
-      .populate('consultation', 'title consultationType status')
-      .populate('seeker', 'fullname email phone')
-      .populate('provider', 'fullname email phone');
+      .populate('questionId', 'description status')
+      .populate('seekerId', 'fullname email phone')
+      .populate('providerId', 'fullname email phone');
 
     if (!payment) {
       return res.status(404).json({
@@ -1118,7 +1118,7 @@ router.get('/payments/:id', auth, isAdmin, async (req, res) => {
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [pending, completed, failed, cancelled, refunded]
+ *                 enum: [pending, processing, success, failed, cancelled]
  *               notes:
  *                 type: string
  *                 description: Admin notes
@@ -1206,14 +1206,14 @@ router.put('/payments/:id/refund', auth, isAdmin, async (req, res) => {
       });
     }
 
-    if (payment.status !== 'completed') {
+    if (payment.status !== 'success') {
       return res.status(400).json({
         success: false,
-        message: 'Only completed payments can be refunded'
+        message: 'Only successful payments can be refunded'
       });
     }
 
-    payment.status = 'refunded';
+    payment.status = 'cancelled';
     payment.refundedAt = new Date();
     payment.refundAmount = payment.amount;
 

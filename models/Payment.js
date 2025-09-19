@@ -1,17 +1,17 @@
 const mongoose = require('mongoose');
 
 const paymentSchema = new mongoose.Schema({
-  consultation: {
+  questionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Consultation',
+    ref: 'Question',
     required: true
   },
-  seeker: {
+  seekerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  provider: {
+  providerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
@@ -21,62 +21,39 @@ const paymentSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
-  currency: {
-    type: String,
-    default: 'USD'
-  },
-  paymentMethod: {
-    type: String,
-    required: true,
-    enum: ['stripe', 'paypal', 'bank_transfer', 'cash']
-  },
-  status: {
-    type: String,
-    required: true,
-    enum: ['pending', 'processing', 'completed', 'failed', 'refunded', 'cancelled'],
-    default: 'pending'
-  },
   transactionId: {
     type: String,
     unique: true,
     sparse: true
   },
-  stripePaymentIntentId: {
+  currency: {
     type: String,
-    sparse: true
+    default: 'USD'
+  },
+  status: {
+    type: String,
+    required: true,
+    enum: ['pending', 'processing', 'success', 'failed', 'cancelled'],
+    default: 'pending'
   },
   description: {
     type: String,
     required: true
-  },
-  metadata: {
-    type: Map,
-    of: String
-  },
-  refundReason: {
-    type: String
-  },
-  refundedAt: {
-    type: Date
-  },
-  refundedAmount: {
-    type: Number,
-    min: 0
   }
 }, {
   timestamps: true
 });
 
 // Index for better query performance
-paymentSchema.index({ consultation: 1 });
-paymentSchema.index({ seeker: 1 });
-paymentSchema.index({ provider: 1 });
+paymentSchema.index({ questionId: 1 });
+paymentSchema.index({ seekerId: 1 });
+paymentSchema.index({ providerId: 1 });
 paymentSchema.index({ status: 1 });
 paymentSchema.index({ createdAt: -1 });
 
 // Virtual for payment status
 paymentSchema.virtual('isCompleted').get(function() {
-  return this.status === 'completed';
+  return this.status === 'success';
 });
 
 // Virtual for payment amount in cents (for Stripe)
@@ -86,7 +63,7 @@ paymentSchema.virtual('amountInCents').get(function() {
 
 // Method to mark payment as completed
 paymentSchema.methods.markCompleted = function(transactionId) {
-  this.status = 'completed';
+  this.status = 'success';
   this.transactionId = transactionId;
   this.updatedAt = new Date();
   return this.save();

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { auth, isAdmin } = require('../middleware/auth');
 const Payment = require('../models/Payment');
-const Consultation = require('../models/Consultation');
+const Question = require('../models/Question');
 const User = require('../models/User');
 
 /**
@@ -36,7 +36,7 @@ const User = require('../models/User');
  *         name: status
  *         schema:
  *           type: string
- *           enum: [all, pending, completed, failed, cancelled]
+ *           enum: [all, pending, processing, success, failed, cancelled]
  *         description: Filter by payment status
  *       - in: query
  *         name: method
@@ -105,9 +105,9 @@ router.get('/', auth, isAdmin, async (req, res) => {
     
     // Get payments with pagination
     const payments = await Payment.find(finalFilter)
-      .populate('consultation', 'title consultationType status')
-      .populate('seeker', 'fullname email')
-      .populate('provider', 'fullname email')
+      .populate('questionId', 'description status')
+      .populate('seekerId', 'fullname email')
+      .populate('providerId', 'fullname email')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -142,7 +142,7 @@ router.get('/', auth, isAdmin, async (req, res) => {
  * /api/payments:
  *   post:
  *     summary: Create a new payment
- *     description: Create a new payment for a consultation (Seekers only)
+ *     description: Create a new payment for a question (Seekers only)
  *     tags: [Payments - Seeker]
  *     security:
  *       - bearerAuth: []
@@ -150,34 +150,59 @@ router.get('/', auth, isAdmin, async (req, res) => {
  *       required: true
  *       content:
  *         application/json:
+ *           examples:
+ *             example1:
+ *               summary: Basic payment creation
+ *               value:
+ *                 questionId: "507f1f77bcf86cd799439011"
+ *                 seekerId: "507f1f77bcf86cd799439012"
+ *                 providerId: "507f1f77bcf86cd799439013"
+ *                 amount: 100.50
+ *                 currency: "USD"
+ *                 description: "Payment for consultation question"
+ *                 transactionId: "TXN_123456789"
  *           schema:
  *             type: object
  *             required:
- *               - consultationId
+ *               - questionId
+ *               - seekerId
+ *               - providerId
  *               - amount
- *               - paymentMethod
  *               - description
  *             properties:
- *               consultationId:
+ *               questionId:
  *                 type: string
- *                 description: ID of the consultation
+ *                 format: ObjectId
+ *                 description: ID of the question
+ *                 example: "507f1f77bcf86cd799439011"
+ *               seekerId:
+ *                 type: string
+ *                 format: ObjectId
+ *                 description: ID of the seeker user
+ *                 example: "507f1f77bcf86cd799439012"
+ *               providerId:
+ *                 type: string
+ *                 format: ObjectId
+ *                 description: ID of the provider user
+ *                 example: "507f1f77bcf86cd799439013"
  *               amount:
  *                 type: number
+ *                 minimum: 0
  *                 description: Payment amount
+ *                 example: 100.50
  *               currency:
  *                 type: string
- *                 default: USD
+ *                 default: "USD"
  *                 description: Payment currency
- *               paymentMethod:
- *                 type: string
- *                 enum: [credit_card, debit_card, bank_transfer, wallet]
- *                 description: Payment method
+ *                 example: "USD"
  *               description:
  *                 type: string
  *                 description: Payment description
- *               metadata:
- *                 type: object
- *                 description: Additional payment metadata
+ *                 example: "Payment for consultation question"
+ *               transactionId:
+ *                 type: string
+ *                 description: External transaction ID (optional)
+ *                 example: "TXN_123456789"
  *     responses:
  *       201:
  *         description: Payment created successfully
@@ -197,80 +222,76 @@ router.get('/', auth, isAdmin, async (req, res) => {
  *       401:
  *         description: Unauthorized
  *       404:
- *         description: Consultation not found
+ *         description: Question not found
  *       500:
  *         description: Server error
  */
 router.post('/', auth, async (req, res) => {
   try {
     const {
-      consultationId,
+      questionId,
+      seekerId,
+      providerId,
       amount,
       currency = 'USD',
-      paymentMethod,
       description,
-      metadata = {}
+      transactionId
     } = req.body;
     
     // Validate required fields
-    if (!consultationId || !amount || !paymentMethod || !description) {
+    if (!questionId || !seekerId || !providerId || !amount || !description) {
       return res.status(400).json({
         success: false,
         message: 'Missing required fields'
       });
     }
     
-    // Check if consultation exists and user has access
-    const consultation = await Consultation.findById(consultationId);
-    if (!consultation) {
+    // Check if question exists
+    const question = await Question.findById(questionId);
+    if (!question) {
       return res.status(404).json({
         success: false,
-        message: 'Consultation not found'
+        message: 'Question not found'
       });
     }
     
-    // Check if user is the seeker of this consultation
-    if (consultation.seeker.toString() !== req.userProfile._id.toString()) {
+    // Check if seeker and provider exist
+    const seeker = await User.findById(seekerId);
+    const provider = await User.findById(providerId);
+    
+    if (!seeker || !provider) {
+      return res.status(404).json({
+        success: false,
+        message: 'Seeker or provider not found'
+      });
+    }
+    
+    // Check if user is authorized to create this payment
+    if (req.userProfile.userType !== 'admin' && 
+        req.userProfile._id.toString() !== seekerId.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Access denied'
       });
     }
     
-    // Check if consultation is in a valid state for payment
-    if (consultation.status !== 'accepted' && consultation.status !== 'pending') {
-      return res.status(400).json({
-        success: false,
-        message: 'Consultation is not in a valid state for payment'
-      });
-    }
-    
-    // Check if payment already exists for this consultation
-    const existingPayment = await Payment.findOne({ consultation: consultationId });
+    // Check if payment already exists for this question
+    const existingPayment = await Payment.findOne({ questionId: questionId });
     if (existingPayment) {
       return res.status(400).json({
         success: false,
-        message: 'Payment already exists for this consultation'
-      });
-    }
-    
-    // Validate amount matches consultation price
-    if (amount !== consultation.price) {
-      return res.status(400).json({
-        success: false,
-        message: 'Payment amount must match consultation price'
+        message: 'Payment already exists for this question'
       });
     }
     
     const payment = new Payment({
-      consultation: consultationId,
-      seeker: req.userProfile._id,
-      provider: consultation.provider,
+      questionId,
+      seekerId,
+      providerId,
       amount,
       currency,
-      paymentMethod,
       description,
-      metadata,
+      transactionId,
       status: 'pending'
     });
     
@@ -278,9 +299,9 @@ router.post('/', auth, async (req, res) => {
     
     // Populate the payment for response
     await payment.populate([
-      { path: 'consultation', select: 'title consultationType status' },
-      { path: 'seeker', select: 'fullname email' },
-      { path: 'provider', select: 'fullname email' }
+      { path: 'questionId', select: 'description status' },
+      { path: 'seekerId', select: 'fullname email' },
+      { path: 'providerId', select: 'fullname email' }
     ]);
     
     res.status(201).json({
@@ -340,9 +361,9 @@ router.post('/', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const payment = await Payment.findById(req.params.id)
-      .populate('consultation', 'title consultationType status scheduledDate')
-      .populate('seeker', 'fullname email phone')
-      .populate('provider', 'fullname email phone');
+      .populate('questionId', 'description status')
+      .populate('seekerId', 'fullname email phone')
+      .populate('providerId', 'fullname email phone');
     
     if (!payment) {
       return res.status(404).json({ 
@@ -352,8 +373,8 @@ router.get('/:id', auth, async (req, res) => {
     }
     
     // Check if user has access to this payment
-    const isOwner = payment.seeker.toString() === req.userProfile._id.toString() ||
-                   payment.provider.toString() === req.userProfile._id.toString();
+    const isOwner = payment.seekerId.toString() === req.userProfile._id.toString() ||
+                   payment.providerId.toString() === req.userProfile._id.toString();
     
     if (!isOwner && req.userProfile.userType !== 'admin') {
       return res.status(403).json({ 
@@ -400,17 +421,14 @@ router.get('/:id', auth, async (req, res) => {
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [pending, completed, failed, cancelled]
+ *                 enum: [pending, processing, success, failed, cancelled]
  *                 description: Payment status
- *               notes:
+ *               description:
  *                 type: string
- *                 description: Payment notes
+ *                 description: Payment description
  *               transactionId:
  *                 type: string
  *                 description: External transaction ID
- *               stripePaymentIntentId:
- *                 type: string
- *                 description: Stripe payment intent ID
  *     responses:
  *       200:
  *         description: Payment updated successfully
@@ -439,7 +457,7 @@ router.get('/:id', auth, async (req, res) => {
  */
 router.put('/:id', auth, async (req, res) => {
   try {
-    const { status, notes, transactionId, stripePaymentIntentId } = req.body;
+    const { status, description, transactionId } = req.body;
     
     const payment = await Payment.findById(req.params.id);
     if (!payment) {
@@ -450,8 +468,8 @@ router.put('/:id', auth, async (req, res) => {
     }
     
     // Check if user has access to update this payment
-    const isOwner = payment.seeker.toString() === req.userProfile._id.toString() ||
-                   payment.provider.toString() === req.userProfile._id.toString();
+    const isOwner = payment.seekerId.toString() === req.userProfile._id.toString() ||
+                   payment.providerId.toString() === req.userProfile._id.toString();
     
     if (!isOwner && req.userProfile.userType !== 'admin') {
       return res.status(403).json({ 
@@ -462,16 +480,15 @@ router.put('/:id', auth, async (req, res) => {
     
     // Update payment fields
     if (status) payment.status = status;
-    if (notes !== undefined) payment.notes = notes;
+    if (description) payment.description = description;
     if (transactionId) payment.transactionId = transactionId;
-    if (stripePaymentIntentId) payment.stripePaymentIntentId = stripePaymentIntentId;
     
-    // If payment is completed, update consultation status
-    if (status === 'completed') {
-      const consultation = await Consultation.findById(payment.consultation);
-      if (consultation && consultation.status === 'pending') {
-        consultation.status = 'accepted';
-        await consultation.save();
+    // If payment is successful, update question status if needed
+    if (status === 'success') {
+      const question = await Question.findById(payment.questionId);
+      if (question && question.status === 'pending') {
+        question.status = 'answered';
+        await question.save();
       }
     }
     
@@ -541,10 +558,10 @@ router.delete('/:id', auth, isAdmin, async (req, res) => {
     }
     
     // Only allow deletion of pending or failed payments
-    if (payment.status === 'completed' || payment.status === 'processing') {
+    if (payment.status === 'success' || payment.status === 'processing') {
       return res.status(400).json({ 
         success: false, 
-        message: 'Cannot delete completed or processing payments' 
+        message: 'Cannot delete successful or processing payments' 
       });
     }
     

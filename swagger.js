@@ -141,19 +141,20 @@ const options = {
           type: 'object',
           properties: {
             _id: { type: 'string' },
-            consultation: { type: 'string', description: 'Consultation ID' },
-            seeker: { type: 'string', description: 'Seeker user ID' },
-            provider: { type: 'string', description: 'Provider user ID' },
+            questionId: { type: 'string', description: 'Question ID' },
+            seekerId: { type: 'string', description: 'Seeker user ID' },
+            providerId: { type: 'string', description: 'Provider user ID' },
             amount: { type: 'number', description: 'Payment amount' },
+            transactionId: { type: 'string', description: 'External transaction ID' },
             currency: { type: 'string', default: 'USD' },
-            paymentMethod: { type: 'string', description: 'Payment method' },
             status: { 
               type: 'string', 
-              enum: ['pending', 'completed', 'failed', 'cancelled'],
+              enum: ['pending', 'processing', 'success', 'failed', 'cancelled'],
               description: 'Payment status'
             },
-            transactionId: { type: 'string', description: 'External transaction ID' },
-            createdAt: { type: 'string', format: 'date-time' }
+            description: { type: 'string', description: 'Payment description' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
           }
         },
         Chat: {
