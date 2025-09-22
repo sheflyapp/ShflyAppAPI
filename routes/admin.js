@@ -970,12 +970,12 @@ router.delete('/consultations/:id', auth, isAdmin, async (req, res) => {
  */
 router.get('/payments', auth, isAdmin, async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = '', status = '', method = '' } = req.query;
+    const { page = 1, limit = 10, search = '', status: statusFilter = '', method = '' } = req.query;
     const skip = (page - 1) * limit;
 
     // Build filter object
     const filter = {};
-    if (status && status !== 'all') filter.status = status;
+    if (statusFilter && statusFilter !== 'all') filter.status = statusFilter;
     if (method && method !== 'all') filter.paymentMethod = method;
 
     // Build search query
@@ -1005,6 +1005,39 @@ router.get('/payments', auth, isAdmin, async (req, res) => {
     const totalPayments = await Payment.countDocuments(finalFilter);
     const totalPages = Math.ceil(totalPayments / limit);
 
+    // Compute totals in Node to allow currency conversion to SAR
+    const currencyToSarRate = {
+      SAR: 1,
+      USD: 3.75,
+      EUR: 4.1,
+      GBP: 4.8,
+      AED: 1.02
+    };
+
+    const statusKeys = ['pending','processing','success','failed','cancelled'];
+    const statusTotals = statusKeys.reduce((acc, key) => {
+      acc[key] = { count: 0, amount: 0, amountSar: 0 };
+      return acc;
+    }, {});
+
+    let totalAmount = 0;
+    let totalAmountSar = 0;
+
+    for (const p of payments) {
+      const st = p.status;
+      const rate = currencyToSarRate[p.currency] || 1;
+      const amount = (Number(p.amount) || 0) / 100;
+      const amountSar = amount * rate;
+      totalAmount += amount;
+      totalAmountSar += amountSar;
+      if (statusTotals[st]) {
+        statusTotals[st].count += 1;
+        statusTotals[st].amount += amount;
+        statusTotals[st].amountSar += amountSar;
+      }
+    }
+    const totalRevenueSar = statusTotals.success?.amountSar || 0;
+
     res.json({
       success: true,
       data: {
@@ -1014,6 +1047,13 @@ router.get('/payments', auth, isAdmin, async (req, res) => {
           totalPages,
           totalPayments,
           limit: parseInt(limit)
+        },
+        totals: {
+          totalPayments,
+          totalAmount,
+          totalAmountSar,
+          totalRevenueSar,
+          statusTotals
         }
       }
     });
@@ -2268,3 +2308,146 @@ router.delete('/users/:id', auth, isAdmin, async (req, res) => {
 });
 
 module.exports = router;
+
+// New Admin Dashboard stats endpoint for frontend Dashboard.js
+router.get('/dashboard/stats', auth, isAdmin, async (req, res) => {
+  try {
+    // Overview counts
+    const [
+      totalUsers,
+      totalSeekers,
+      totalProviders,
+      totalCategories,
+      totalConsultations,
+      totalQuestions
+    ] = await Promise.all([
+      User.countDocuments(),
+      User.countDocuments({ userType: 'seeker' }),
+      User.countDocuments({ userType: 'provider' }),
+      Category.countDocuments(),
+      Consultation.countDocuments(),
+      Question.countDocuments()
+    ]);
+
+    // Payments aggregates in SAR, amounts stored in cents
+    const allPayments = await Payment.find({}).select('amount currency status');
+    const currencyToSarRate = { SAR: 1, USD: 3.75, EUR: 4.1, GBP: 4.8, AED: 1.02 };
+    const statusKeys = ['pending','processing','success','failed','cancelled'];
+    const statusTotals = statusKeys.reduce((acc, key) => {
+      acc[key] = { count: 0, amountSar: 0 };
+      return acc;
+    }, {});
+    let totalAmountSar = 0;
+    let totalRevenueSar = 0;
+    for (const p of allPayments) {
+      const rate = currencyToSarRate[p.currency] || 1;
+      const amount = (Number(p.amount) || 0) / 100; // cents -> units
+      const amountSar = amount * rate;
+      totalAmountSar += amountSar;
+      if (statusTotals[p.status]) {
+        statusTotals[p.status].count += 1;
+        statusTotals[p.status].amountSar += amountSar;
+      }
+    }
+    totalRevenueSar = statusTotals.success?.amountSar || 0;
+    const totalPayments = allPayments.length;
+
+    // Recent questions
+    const recentQuestions = await Question.find()
+      .populate('userId', 'fullname email')
+      .populate('closedBy', 'fullname email')
+      .populate('category', 'name')
+      .populate('subcategory', 'name')
+      .sort({ createdAt: -1 })
+      .limit(6);
+
+    // Charts data for last 6 months
+    const months = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        name: d.toLocaleString('en-US', { month: 'short' })
+      });
+    }
+
+    const monthKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const initSeries = () => months.reduce((acc, m) => (acc[m.key] = 0, acc), {});
+
+    const usersSeries = initSeries();
+    const questionsSeries = initSeries();
+    const revenueSarSeries = initSeries();
+
+    const sinceDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+
+    const [users6m, questions6m, payments6m] = await Promise.all([
+      User.find({ createdAt: { $gte: sinceDate } }).select('createdAt'),
+      Question.find({ createdAt: { $gte: sinceDate } }).select('createdAt'),
+      Payment.find({ createdAt: { $gte: sinceDate } }).select('createdAt amount currency status')
+    ]);
+
+    users6m.forEach(u => {
+      const key = monthKey(u.createdAt);
+      if (usersSeries[key] !== undefined) usersSeries[key] += 1;
+    });
+
+    questions6m.forEach(q => {
+      const key = monthKey(q.createdAt);
+      if (questionsSeries[key] !== undefined) questionsSeries[key] += 1;
+    });
+
+    payments6m.forEach(p => {
+      const key = monthKey(p.createdAt);
+      if (revenueSarSeries[key] !== undefined && p.status === 'success') {
+        const rate = currencyToSarRate[p.currency] || 1;
+        const amount = (Number(p.amount) || 0) / 100;
+        revenueSarSeries[key] += amount * rate;
+      }
+    });
+
+    const charts = months.map(m => ({
+      name: m.name,
+      users: usersSeries[m.key] || 0,
+      questions: questionsSeries[m.key] || 0,
+      revenue: Number((revenueSarSeries[m.key] || 0).toFixed(2))
+    }));
+
+    return res.json({
+      success: true,
+      data: {
+        overview: {
+          totalUsers,
+          totalProviders,
+          totalSeekers,
+          totalCategories,
+          totalConsultations,
+          totalQuestions,
+          totalRevenue: totalRevenueSar
+        },
+        payments: {
+          totalPayments,
+          totalAmountSar,
+          totalRevenueSar,
+          statusTotals
+        },
+        charts,
+        recent: {
+          questions: recentQuestions.map(q => ({
+            _id: q._id,
+            postedBy: { fullname: q.userId?.fullname, email: q.userId?.email },
+            solvedBy: q.closedBy ? { fullname: q.closedBy?.fullname, email: q.closedBy?.email } : null,
+            category: q.category?.name,
+            subcategory: q.subcategory?.name,
+            description: q.description,
+            status: q.status,
+            createdAt: q.createdAt
+          }))
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Dashboard stats error:', error);
+    return res.status(500).json({ success: false, message: 'Error fetching dashboard stats' });
+  }
+});

@@ -161,24 +161,51 @@ const options = {
           type: 'object',
           properties: {
             _id: { type: 'string' },
-            consultation: { type: 'string', description: 'Consultation ID' },
-            seeker: { type: 'string', description: 'Seeker user ID' },
-            provider: { type: 'string', description: 'Provider user ID' },
+            question: { type: 'string', description: 'Question ID' },
+            participants: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'User IDs participating in the chat'
+            },
             messages: {
               type: 'array',
               items: {
                 type: 'object',
                 properties: {
                   sender: { type: 'string', description: 'Sender user ID' },
-                  message: { type: 'string', description: 'Message content' },
+                  content: { type: 'string', description: 'Message content' },
                   messageType: { type: 'string', enum: ['text', 'image', 'file'], default: 'text' },
-                  timestamp: { type: 'string', format: 'date-time' },
-                  readBy: { type: 'array', items: { type: 'string' } }
+                  fileUrl: { type: 'string', description: 'Optional file URL for image/file messages' },
+                  isRead: { type: 'boolean' },
+                  readAt: { type: 'string', format: 'date-time' },
+                  readBy: { type: 'array', items: { type: 'string' } },
+                  createdAt: { type: 'string', format: 'date-time' },
+                  updatedAt: { type: 'string', format: 'date-time' }
                 }
               }
             },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' }
+          },
+          example: {
+            _id: 'string',
+            question: 'string',
+            participants: ['string', 'string'],
+            messages: [
+              {
+                sender: 'string',
+                content: 'string',
+                messageType: 'text',
+                fileUrl: 'string',
+                isRead: false,
+                readAt: null,
+                readBy: [],
+                createdAt: '2025-09-22T18:37:03.706Z',
+                updatedAt: '2025-09-22T18:37:03.706Z'
+              }
+            ],
+            createdAt: '2025-09-22T18:37:03.706Z',
+            updatedAt: '2025-09-22T18:37:03.706Z'
           }
         },
         Notification: {

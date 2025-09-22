@@ -707,18 +707,34 @@
  * @swagger
  * /api/chat:
  *   get:
- *     summary: Get chat messages
- *     description: Get chat messages for a consultation
+ *     summary: Get chats list or messages filtered by chatId/questionId/senderId/providerId
+ *     description: 
+ *       - Without filters: returns a paginated list of conversations for the current user.
+ *       - With any of chatId | questionId | (senderId/providerId): returns messages for the matched conversation.
  *     tags: [Chat]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
- *         name: consultation
- *         required: true
+ *         name: chatId
  *         schema:
  *           type: string
- *         description: Consultation ID
+ *         description: Conversation ID to fetch messages for
+ *       - in: query
+ *         name: questionId
+ *         schema:
+ *           type: string
+ *         description: Question ID to fetch the related conversation messages
+ *       - in: query
+ *         name: senderId
+ *         schema:
+ *           type: string
+ *         description: A participant user ID (commonly the sender). With providerId filters by both participants.
+ *       - in: query
+ *         name: providerId
+ *         schema:
+ *           type: string
+ *         description: A participant user ID (commonly the provider/receiver). With senderId filters by both participants.
  *       - in: query
  *         name: page
  *         schema:
@@ -730,7 +746,7 @@
  *         schema:
  *           type: number
  *           default: 50
- *         description: Number of messages per page
+ *         description: Page size (lists); For messages default is 50 if fetching messages
  *     responses:
  *       200:
  *         description: Chat messages retrieved successfully

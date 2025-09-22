@@ -25,15 +25,19 @@ const messageSchema = new mongoose.Schema({
   },
   readAt: {
     type: Date
-  }
+  },
+  readBy: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }]
 }, {
   timestamps: true
 });
 
 const chatRoomSchema = new mongoose.Schema({
-  consultation: {
+  question: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Consultation',
+    ref: 'Question',
     required: true
   },
   participants: [{
@@ -55,7 +59,7 @@ const chatRoomSchema = new mongoose.Schema({
 });
 
 // Index for better query performance
-chatRoomSchema.index({ consultation: 1 });
+chatRoomSchema.index({ question: 1 });
 chatRoomSchema.index({ participants: 1 });
 chatRoomSchema.index({ lastMessage: -1 });
 
