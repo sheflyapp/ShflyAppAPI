@@ -3,7 +3,7 @@ const router = express.Router();
 const { auth } = require('../middleware/auth');
 const Review = require('../models/Review');
 const User = require('../models/User');
-const Consultation = require('../models/Consultation');
+const Question = require('../models/Question');
 
 /**
  * @swagger
@@ -13,12 +13,12 @@ const Consultation = require('../models/Consultation');
  *     tags: [Reviews - Seeker]
  *     parameters:
  *       - in: query
- *         name: provider
+ *         name: providerId
  *         schema:
  *           type: string
  *         description: Filter by provider ID
  *       - in: query
- *         name: seeker
+ *         name: seekerId
  *         schema:
  *           type: string
  *         description: Filter by seeker ID
@@ -61,8 +61,8 @@ const Consultation = require('../models/Consultation');
 router.get('/', async (req, res) => {
   try {
     const {
-      provider,
-      seeker,
+      providerId,
+      seekerId,
       rating,
       page = 1,
       limit = 10
@@ -70,16 +70,16 @@ router.get('/', async (req, res) => {
 
     const filter = {};
 
-    if (provider) filter.provider = provider;
-    if (seeker) filter.seeker = seeker;
+    if (providerId) filter.providerId = providerId;
+    if (seekerId) filter.seekerId = seekerId;
     if (rating) filter.rating = parseInt(rating);
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const reviews = await Review.find(filter)
-      .populate('seeker', 'fullname username profileImage')
-      .populate('provider', 'fullname username profileImage')
-      .populate('consultation', 'title')
+      .populate('seekerId', 'fullname username profileImage')
+      .populate('providerId', 'fullname username profileImage')
+      .populate('questionsId', 'description')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -120,17 +120,21 @@ router.get('/', async (req, res) => {
  *           schema:
  *             type: object
  *             required:
- *               - provider
- *               - consultation
+ *               - providerId
+ *               - questionsId
+ *               - seekerId
  *               - rating
  *               - comment
  *             properties:
- *               provider:
+ *               providerId:
  *                 type: string
  *                 description: ID of the provider being reviewed
- *               consultation:
+ *               questionsId:
  *                 type: string
- *                 description: ID of the consultation
+ *                 description: ID of the question
+ *               seekerId:
+ *                 type: string
+ *                 description: ID of the seeker giving the review
  *               rating:
  *                 type: integer
  *                 minimum: 1
@@ -157,12 +161,12 @@ router.get('/', async (req, res) => {
  */
 router.post('/', auth, async (req, res) => {
   try {
-    const { provider, consultation: consultationId, rating, comment } = req.body;
+    const { providerId, questionsId, seekerId, rating, comment } = req.body;
 
-    if (!provider || !consultationId || !rating || !comment) {
+    if (!providerId || !questionsId || !seekerId || !rating || !comment) {
       return res.status(400).json({
         success: false,
-        message: 'Provider, consultation, rating, and comment are required'
+        message: 'ProviderId, questionsId, seekerId, rating, and comment are required'
       });
     }
 
@@ -173,54 +177,47 @@ router.post('/', auth, async (req, res) => {
       });
     }
 
-    // Check if consultation exists and belongs to the user
-    const consultation = await Consultation.findById(consultationId);
-    if (!consultation) {
+    // Check if question exists and belongs to the seeker
+    const question = await Question.findById(questionsId);
+    if (!question) {
       return res.status(404).json({
         success: false,
-        message: 'Consultation not found'
+        message: 'Question not found'
       });
     }
 
-    if (consultation.seeker.toString() !== req.user.id) {
+    if (question.userId.toString() !== seekerId) {
       return res.status(403).json({
         success: false,
-        message: 'You can only review consultations you participated in'
+        message: 'You can only review questions you asked'
       });
     }
 
-    if (consultation.provider.toString() !== provider) {
+    if (question.status !== 'answered') {
       return res.status(400).json({
         success: false,
-        message: 'Provider ID does not match consultation provider'
+        message: 'You can only review answered questions'
       });
     }
 
-    if (consultation.status !== 'completed') {
-      return res.status(400).json({
-        success: false,
-        message: 'You can only review completed consultations'
-      });
-    }
-
-    // Check if user already reviewed this consultation
+    // Check if user already reviewed this question
     const existingReview = await Review.findOne({
-      consultation: consultationId,
-      seeker: req.user.id
+      questionsId: questionsId,
+      seekerId: seekerId
     });
 
     if (existingReview) {
       return res.status(400).json({
         success: false,
-        message: 'You have already reviewed this consultation'
+        message: 'You have already reviewed this question'
       });
     }
 
     // Create the review
     const review = new Review({
-      seeker: req.user.id,
-      provider,
-      consultation: consultationId,
+      seekerId: seekerId,
+      providerId: providerId,
+      questionsId: questionsId,
       rating,
       comment
     });
@@ -228,12 +225,12 @@ router.post('/', auth, async (req, res) => {
     await review.save();
 
     // Update provider's average rating
-    await updateProviderRating(provider);
+    await updateProviderRating(providerId);
 
     // Populate the review for response
-    await review.populate('seeker', 'fullname username profileImage');
-    await review.populate('provider', 'fullname username profileImage');
-    await review.populate('consultation', 'title');
+    await review.populate('seekerId', 'fullname username profileImage');
+    await review.populate('providerId', 'fullname username profileImage');
+    await review.populate('questionsId', 'description');
 
     res.status(201).json({
       success: true,
@@ -282,9 +279,9 @@ router.post('/', auth, async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const review = await Review.findById(req.params.id)
-      .populate('seeker', 'fullname username profileImage')
-      .populate('provider', 'fullname username profileImage')
-      .populate('consultation', 'title');
+      .populate('seekerId', 'fullname username profileImage')
+      .populate('providerId', 'fullname username profileImage')
+      .populate('questionsId', 'description');
 
     if (!review) {
       return res.status(404).json({
@@ -364,7 +361,7 @@ router.put('/:id', auth, async (req, res) => {
     }
 
     // Check if user owns this review
-    if (review.seeker.toString() !== req.user.id) {
+    if (review.seekerId.toString() !== req.user.id) {
       return res.status(403).json({
         success: false,
         message: 'You can only edit your own reviews'
@@ -390,12 +387,12 @@ router.put('/:id', auth, async (req, res) => {
     await review.save();
 
     // Update provider's average rating
-    await updateProviderRating(review.provider);
+    await updateProviderRating(review.providerId);
 
     // Populate the review for response
-    await review.populate('seeker', 'fullname username profileImage');
-    await review.populate('provider', 'fullname username profileImage');
-    await review.populate('consultation', 'title');
+    await review.populate('seekerId', 'fullname username profileImage');
+    await review.populate('providerId', 'fullname username profileImage');
+    await review.populate('questionsId', 'description');
 
     res.json({
       success: true,
@@ -450,14 +447,14 @@ router.delete('/:id', auth, async (req, res) => {
     }
 
     // Check if user owns this review
-    if (review.seeker.toString() !== req.user.id) {
+    if (review.seekerId.toString() !== req.user.id) {
       return res.status(403).json({
         success: false,
         message: 'You can only delete your own reviews'
       });
     }
 
-    const providerId = review.provider;
+    const providerId = review.providerId;
     await Review.findByIdAndDelete(req.params.id);
 
     // Update provider's average rating
@@ -525,18 +522,18 @@ router.get('/provider/:providerId', async (req, res) => {
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const reviews = await Review.find({ provider: providerId })
-      .populate('seeker', 'fullname username profileImage')
-      .populate('consultation', 'title')
+    const reviews = await Review.find({ providerId: providerId })
+      .populate('seekerId', 'fullname username profileImage')
+      .populate('questionsId', 'description')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
-    const total = await Review.countDocuments({ provider: providerId });
+    const total = await Review.countDocuments({ providerId: providerId });
 
     // Get provider's rating statistics
     const ratingStats = await Review.aggregate([
-      { $match: { provider: providerId } },
+      { $match: { providerId: providerId } },
       {
         $group: {
           _id: null,
@@ -585,7 +582,7 @@ router.get('/provider/:providerId', async (req, res) => {
 async function updateProviderRating(providerId) {
   try {
     const stats = await Review.aggregate([
-      { $match: { provider: providerId } },
+      { $match: { providerId: providerId } },
       {
         $group: {
           _id: null,

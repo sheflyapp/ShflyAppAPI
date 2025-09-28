@@ -1,17 +1,17 @@
 const mongoose = require('mongoose');
 
 const reviewSchema = new mongoose.Schema({
-  consultation: {
+  questionsId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Consultation',
+    ref: 'Question',
     required: true
   },
-  provider: {
+  providerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  reviewer: {
+  seekerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
@@ -60,12 +60,12 @@ const reviewSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Compound index to ensure one review per consultation per reviewer
-reviewSchema.index({ consultation: 1, reviewer: 1 }, { unique: true });
+// Compound index to ensure one review per question per seeker
+reviewSchema.index({ questionsId: 1, seekerId: 1 }, { unique: true });
 
 // Index for faster queries
-reviewSchema.index({ provider: 1, rating: 1 });
-reviewSchema.index({ provider: 1, createdAt: -1 });
+reviewSchema.index({ providerId: 1, rating: 1 });
+reviewSchema.index({ providerId: 1, createdAt: -1 });
 reviewSchema.index({ rating: 1, createdAt: -1 });
 
 // Pre-save middleware to validate data
@@ -114,7 +114,7 @@ reviewSchema.methods.addProviderResponse = function(comment) {
 // Static method to get average rating for a provider
 reviewSchema.statics.getAverageRating = async function(providerId) {
   const result = await this.aggregate([
-    { $match: { provider: providerId } },
+    { $match: { providerId: providerId } },
     {
       $group: {
         _id: null,
@@ -136,7 +136,7 @@ reviewSchema.statics.getAverageRating = async function(providerId) {
 // Static method to get rating distribution for a provider
 reviewSchema.statics.getRatingDistribution = async function(providerId) {
   const result = await this.aggregate([
-    { $match: { provider: providerId } },
+    { $match: { providerId: providerId } },
     {
       $group: {
         _id: '$rating',
@@ -159,7 +159,7 @@ reviewSchema.statics.getTopRatedProviders = async function(limit = 10) {
   return this.aggregate([
     {
       $group: {
-        _id: '$provider',
+        _id: '$providerId',
         averageRating: { $avg: '$rating' },
         totalReviews: { $sum: 1 }
       }

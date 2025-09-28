@@ -470,9 +470,10 @@ async function completeFlowTest() {
       try {
         const reviewData = {
           providerId: testProviderId,
+          questionsId: testQuestionId || '507f1f77bcf86cd799439011',
+          seekerId: testSeekerId || '507f1f77bcf86cd799439012',
           rating: 5,
-          comment: 'Excellent consultation! Very professional and helpful.',
-          consultationId: testConsultationId || '507f1f77bcf86cd799439011'
+          comment: 'Excellent consultation! Very professional and helpful.'
         };
         const reviewResponse = await makeAuthenticatedRequest('POST', '/reviews', reviewData, seekerToken);
         logTest('Create Review', 'PASS', `Review created - ${reviewResponse.status}`, 'review');
