@@ -245,8 +245,12 @@ router.post('/', auth, async (req, res) => {
     // Update provider's average rating
     await updateProviderRating(providerId);
 
-    // Close the associated question after a successful review
-    await question.closeQuestion(seekerId);
+    // Close the associated question after a successful review (best-effort)
+    try {
+      await question.closeQuestion(seekerId);
+    } catch (closeErr) {
+      console.error('Failed to close question after review:', closeErr);
+    }
 
     // Populate the review for response
     await review.populate('seekerId', 'fullname username profileImage');
@@ -260,6 +264,29 @@ router.post('/', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating review:', error);
+    // Duplicate review (unique index)
+    if (error && (error.code === 11000 || error.code === 11001)) {
+      return res.status(400).json({
+        success: false,
+        message: 'You have already reviewed this question'
+      });
+    }
+    // Validation errors
+    if (error && error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: Object.values(error.errors).map(e => ({ field: e.path, message: e.message }))
+      });
+    }
+    // Cast errors (invalid ObjectId, etc.)
+    if (error && error.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid data format',
+        field: error.path
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Server error'
