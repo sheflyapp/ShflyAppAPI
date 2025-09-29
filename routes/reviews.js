@@ -4,6 +4,7 @@ const { auth } = require('../middleware/auth');
 const Review = require('../models/Review');
 const User = require('../models/User');
 const Question = require('../models/Question');
+const mongoose = require('mongoose');
 
 /**
  * @swagger
@@ -177,6 +178,14 @@ router.post('/', auth, async (req, res) => {
       });
     }
 
+    // Validate comment length to avoid schema validation throwing 500
+    if (typeof comment !== 'string' || comment.length < 10 || comment.length > 500) {
+      return res.status(400).json({
+        success: false,
+        message: 'Comment must be between 10 and 500 characters'
+      });
+    }
+
     // Check if question exists and belongs to the seeker
     const question = await Question.findById(questionsId);
     if (!question) {
@@ -226,6 +235,9 @@ router.post('/', auth, async (req, res) => {
 
     // Update provider's average rating
     await updateProviderRating(providerId);
+
+    // Close the associated question after a successful review
+    await question.closeQuestion(seekerId);
 
     // Populate the review for response
     await review.populate('seekerId', 'fullname username profileImage');
@@ -533,7 +545,7 @@ router.get('/provider/:providerId', async (req, res) => {
 
     // Get provider's rating statistics
     const ratingStats = await Review.aggregate([
-      { $match: { providerId: providerId } },
+      { $match: { providerId: new mongoose.Types.ObjectId(providerId) } },
       {
         $group: {
           _id: null,
@@ -582,7 +594,7 @@ router.get('/provider/:providerId', async (req, res) => {
 async function updateProviderRating(providerId) {
   try {
     const stats = await Review.aggregate([
-      { $match: { providerId: providerId } },
+      { $match: { providerId: new mongoose.Types.ObjectId(providerId) } },
       {
         $group: {
           _id: null,
