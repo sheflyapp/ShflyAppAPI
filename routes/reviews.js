@@ -164,14 +164,23 @@ router.post('/', auth, async (req, res) => {
   try {
     const { providerId, questionsId, seekerId, rating, comment } = req.body;
 
-    if (!providerId || !questionsId || !seekerId || !rating || !comment) {
+    if (!providerId || !questionsId || !seekerId || rating === undefined || rating === null || !comment) {
       return res.status(400).json({
         success: false,
         message: 'ProviderId, questionsId, seekerId, rating, and comment are required'
       });
     }
 
-    if (rating < 1 || rating > 5) {
+    // Validate ObjectId formats
+    if (!mongoose.isValidObjectId(providerId) || !mongoose.isValidObjectId(questionsId) || !mongoose.isValidObjectId(seekerId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid providerId, questionsId, or seekerId format'
+      });
+    }
+
+    const numericRating = Number(rating);
+    if (!Number.isFinite(numericRating) || numericRating < 1 || numericRating > 5) {
       return res.status(400).json({
         success: false,
         message: 'Rating must be between 1 and 5'
@@ -227,7 +236,7 @@ router.post('/', auth, async (req, res) => {
       seekerId: seekerId,
       providerId: providerId,
       questionsId: questionsId,
-      rating,
+      rating: numericRating,
       comment
     });
 
