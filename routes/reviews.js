@@ -193,12 +193,12 @@ router.post('/', auth, async (req, res) => {
       });
     }
 
-    if (question.status !== 'answered') {
-      return res.status(400).json({
-        success: false,
-        message: 'You can only review answered questions'
-      });
-    }
+    // if (question.status !== 'answered') {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: 'You can only review answered questions'
+    //   });
+    // }
 
     // Check if user already reviewed this question
     const existingReview = await Review.findOne({
