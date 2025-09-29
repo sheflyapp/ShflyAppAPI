@@ -59,6 +59,7 @@ const mongoose = require('mongoose');
  *       500:
  *         description: Server error
  */
+
 router.get('/', async (req, res) => {
   try {
     const {
