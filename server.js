@@ -7,6 +7,8 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpecs = require('./swagger');
+const getRawBody = require('raw-body');
+const querystring = require('querystring');
 require('dotenv').config();
 
 const app = express();
@@ -47,6 +49,37 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token']
 }));
+
+// Tolerant body parser: handles mislabeled JSON bodies that are actually URL-encoded
+app.use(async (req, res, next) => {
+  try {
+    const contentType = req.headers['content-type'] || '';
+    if (!contentType.includes('application/json')) return next();
+
+    // If another parser already handled this, skip
+    if (req._body) return next();
+
+    const body = await getRawBody(req, { encoding: true, length: req.headers['content-length'] });
+    const trimmed = (body || '').trim();
+
+    // If empty, let default parser handle to keep consistent behavior
+    if (!trimmed) return next();
+
+    try {
+      req.body = JSON.parse(trimmed);
+      req._body = true; // mark as parsed to skip downstream parsers
+      return next();
+    } catch (e) {
+      // Fallback: parse as URL-encoded key=value&...
+      req.body = querystring.parse(trimmed);
+      req._body = true;
+      return next();
+    }
+  } catch (err) {
+    return next(err);
+  }
+});
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan('combined'));
