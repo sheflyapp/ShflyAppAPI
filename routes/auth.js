@@ -418,8 +418,9 @@ router.post('/login', [
     }
 
     // Update last login
+    // (updateOne avoids full document validation and the password pre-save hook)
     user.lastLogin = new Date();
-    await user.save();
+    await User.updateOne({ _id: user._id }, { $set: { lastLogin: user.lastLogin } });
 
     // Populate specializations for the response
     await user.populate('specializations', 'name description color');
