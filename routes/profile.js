@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
 const User = require('../models/User');
+const Consultation = require('../models/Consultation');
 const bcrypt = require('bcryptjs');
 
 /**
@@ -698,6 +699,87 @@ router.put('/activate', auth, async (req, res) => {
       success: false,
       message: 'Server error'
     });
+  }
+});
+
+/**
+ * @swagger
+ * /api/profile/switch-role:
+ *   put:
+ *     summary: Switch the current account between seeker and provider
+ *     description: >
+ *       Changes the userType of the logged-in account. Switching to provider sets
+ *       isVerified to false, so the provider stays hidden from search until an admin
+ *       approves; switching back to seeker restores isVerified. Blocked while the user
+ *       has pending, accepted or in-progress consultations. The existing token keeps working.
+ *     tags: [Profile - Common]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userType]
+ *             properties:
+ *               userType:
+ *                 type: string
+ *                 enum: [seeker, provider]
+ *     responses:
+ *       200:
+ *         description: Role switched successfully
+ *       400:
+ *         description: Invalid userType, already in that role, or active consultations exist
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Admin accounts cannot switch roles
+ *       500:
+ *         description: Server error
+ */
+router.put('/switch-role', auth, async (req, res) => {
+  try {
+    const { userType } = req.body;
+    if (!['seeker', 'provider'].includes(userType)) {
+      return res.status(400).json({ success: false, message: 'userType must be seeker or provider' });
+    }
+
+    const user = req.userProfile;
+    if (user.userType === 'admin') {
+      return res.status(403).json({ success: false, message: 'Admin accounts cannot switch roles' });
+    }
+    if (user.userType === userType) {
+      return res.status(400).json({ success: false, message: `You are already a ${userType}` });
+    }
+
+    const activeConsultations = await Consultation.countDocuments({
+      $or: [{ seeker: user._id }, { provider: user._id }],
+      status: { $in: ['pending', 'accepted', 'in_progress'] }
+    });
+    if (activeConsultations > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Complete or cancel your active consultations before switching roles'
+      });
+    }
+
+    user.userType = userType;
+    // New providers await admin approval; seekers have no approval step
+    user.isVerified = userType === 'seeker';
+    await user.save();
+
+    res.json({
+      success: true,
+      message: `Switched to ${userType} successfully`,
+      data: {
+        userType: user.userType,
+        isVerified: user.isVerified
+      }
+    });
+  } catch (error) {
+    console.error('Switch role error:', error);
+    res.status(500).json({ success: false, message: 'Server error while switching role' });
   }
 });
 
