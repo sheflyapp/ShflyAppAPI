@@ -6,6 +6,8 @@ const Category = require('../models/Category');
 const Consultation = require('../models/Consultation');
 const Payment = require('../models/Payment');
 const Question = require('../models/Question');
+const Notification = require('../models/Notification');
+const { sendPushToUser } = require('../services/pushService');
 
 /**
  * @swagger
@@ -1454,7 +1456,7 @@ router.get('/questions', auth, isAdmin, async (req, res) => {
 
     // Get questions with pagination
     const questions = await Question.find(query)
-      .populate('userId', 'fullname email profileImage')
+      .populate('userId', 'fullname username email profileImage')
       .populate('category', 'name description color')
       .populate('subcategory', 'name description color')
       .sort({ createdAt: -1 })
@@ -1519,7 +1521,7 @@ router.get('/questions', auth, isAdmin, async (req, res) => {
 router.get('/questions/:id', auth, isAdmin, async (req, res) => {
   try {
     const question = await Question.findById(req.params.id)
-      .populate('userId', 'fullname email profileImage')
+      .populate('userId', 'fullname username email profileImage')
       .populate('category', 'name description color')
       .populate('subcategory', 'name description color');
 
@@ -2207,7 +2209,7 @@ router.put('/users/:id', auth, isAdmin, async (req, res) => {
  *                 description: Account active status
  *               isVerified:
  *                 type: boolean
- *                 description: Account verification status
+ *                 description: Account verification status. For a provider this is the approval flag; changing it notifies the provider (approved/rejected).
  *     responses:
  *       200:
  *         description: User status updated successfully
@@ -2232,11 +2234,34 @@ router.patch('/users/:id/status', auth, isAdmin, async (req, res) => {
       });
     }
 
+    const verificationChanged = typeof isVerified === 'boolean' && isVerified !== user.isVerified;
+
     // Update status fields
     if (typeof isActive === 'boolean') user.isActive = isActive;
     if (typeof isVerified === 'boolean') user.isVerified = isVerified;
 
     await user.save();
+
+    // Tell a provider whether they were approved or rejected; best-effort
+    if (verificationChanged && user.userType === 'provider') {
+      try {
+        const approved = user.isVerified;
+        const title = approved ? 'Provider Approved' : 'Provider Approval Removed';
+        const message = approved
+          ? 'Your provider account has been approved. You are now visible to seekers.'
+          : 'Your provider account is no longer approved and is hidden from seekers.';
+        await Notification.create({
+          recipient: user._id,
+          sender: req.user.id,
+          type: approved ? 'provider_approved' : 'provider_rejected',
+          title,
+          message
+        });
+        await sendPushToUser(user._id, { title, body: message, data: { type: approved ? 'provider_approved' : 'provider_rejected' } });
+      } catch (notifyError) {
+        console.error('Error notifying provider about approval:', notifyError);
+      }
+    }
 
     res.json({
       success: true,
@@ -2354,7 +2379,7 @@ router.get('/dashboard/stats', auth, isAdmin, async (req, res) => {
 
     // Recent questions
     const recentQuestions = await Question.find()
-      .populate('userId', 'fullname email')
+      .populate('userId', 'fullname username email')
       .populate('closedBy', 'fullname email')
       .populate('category', 'name')
       .populate('subcategory', 'name')

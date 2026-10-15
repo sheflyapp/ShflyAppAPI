@@ -3,6 +3,7 @@ const router = express.Router();
 const { auth } = require('../middleware/auth');
 const User = require('../models/User');
 const Consultation = require('../models/Consultation');
+const Notification = require('../models/Notification');
 const bcrypt = require('bcryptjs');
 
 /**
@@ -768,6 +769,25 @@ router.put('/switch-role', auth, async (req, res) => {
     // New providers await admin approval; seekers have no approval step
     user.isVerified = userType === 'seeker';
     await user.save();
+
+    // Ask admins to review the new provider; failure must not fail the switch
+    if (userType === 'provider') {
+      try {
+        const admins = await User.find({ userType: 'admin', isActive: true }).select('_id');
+        if (admins.length) {
+          await Notification.insertMany(admins.map(admin => ({
+            recipient: admin._id,
+            sender: user._id,
+            type: 'provider_approval_request',
+            title: 'Provider Approval Request',
+            message: `${user.fullname || 'A user'} switched to provider and is waiting for approval`,
+            data: { userId: user._id }
+          })));
+        }
+      } catch (notifyError) {
+        console.error('Error notifying admins about role switch:', notifyError);
+      }
+    }
 
     res.json({
       success: true,

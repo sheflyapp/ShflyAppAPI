@@ -23,6 +23,7 @@ const notificationSchema = new mongoose.Schema({
       'question_received',
       'payment_success',
       'payment_failed',
+      'provider_approval_request',
       'provider_approved',
       'provider_rejected',
       'system_announcement',
