@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const { auth, isAdmin } = require('../middleware/auth');
 const User = require('../models/User');
@@ -1793,6 +1794,18 @@ router.delete('/questions/:id', auth, isAdmin, async (req, res) => {
  *           default: all
  *         description: Filter by verification status
  *       - in: query
+ *         name: specialization
+ *         schema:
+ *           type: string
+ *         description: Category ID; only users who have this specialization
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [all, verified, unverified, active, inactive]
+ *           default: all
+ *         description: Shortcut filter on verification/active status
+ *       - in: query
  *         name: sortBy
  *         schema:
  *           type: string
@@ -1871,6 +1884,8 @@ router.get('/users', auth, isAdmin, async (req, res) => {
       userType = 'all',
       isActive = 'all',
       isVerified = 'all',
+      specialization = '',
+      status = 'all',
       sortBy = 'createdAt',
       sortOrder = 'desc'
     } = req.query;
@@ -1882,6 +1897,15 @@ router.get('/users', auth, isAdmin, async (req, res) => {
     if (userType !== 'all') filter.userType = userType;
     if (isActive !== 'all') filter.isActive = isActive === 'true';
     if (isVerified !== 'all') filter.isVerified = isVerified === 'true';
+    // Category ID: users who have this specialization
+    if (specialization && mongoose.Types.ObjectId.isValid(specialization)) {
+      filter.specializations = specialization;
+    }
+    // Shortcut used by the admin panel: verified | unverified | active | inactive
+    if (status === 'verified') filter.isVerified = true;
+    else if (status === 'unverified') filter.isVerified = false;
+    else if (status === 'active') filter.isActive = true;
+    else if (status === 'inactive') filter.isActive = false;
 
     // Build search query
     let searchQuery = {};
