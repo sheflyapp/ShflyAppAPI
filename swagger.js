@@ -424,7 +424,7 @@ const options = {
       { name: 'Wallet - Common', description: 'Wallet and transaction management (All users)' },
       { name: 'Reviews - Seeker', description: 'Review and rating system (Seekers only)' },
       { name: 'Availability - Provider', description: 'Provider availability scheduling (Providers only)' },
-      { name: 'Provider Questions', description: 'Question management for providers (Providers only)' },
+      { name: 'Provider Questions', description: 'Seekers submit questions to a specific provider' },
       { name: 'Profile - Common', description: 'User profile management (All users)' }
     ]
   },

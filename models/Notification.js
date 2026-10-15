@@ -20,6 +20,7 @@ const notificationSchema = new mongoose.Schema({
       'consultation_cancelled',
       'consultation_reminder',
       'message_received',
+      'question_received',
       'payment_success',
       'payment_failed',
       'provider_approved',

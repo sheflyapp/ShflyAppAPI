@@ -2,6 +2,90 @@ const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
 const Notification = require('../models/Notification');
+const User = require('../models/User');
+
+/**
+ * @swagger
+ * /api/notifications/device-token:
+ *   post:
+ *     summary: Register a device FCM token for push notifications
+ *     tags: [Notifications - Common]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token]
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: FCM registration token of the device
+ *     responses:
+ *       200:
+ *         description: Token registered
+ *       400:
+ *         description: Token is required
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/device-token', auth, async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ success: false, message: 'Token is required' });
+    }
+    // A device token belongs to one user only: drop it from others, then add here
+    await User.updateMany({ fcmTokens: token }, { $pull: { fcmTokens: token } });
+    await User.updateOne({ _id: req.user.id }, { $addToSet: { fcmTokens: token } });
+    res.json({ success: true, message: 'Device token registered' });
+  } catch (error) {
+    console.error('Register device token error:', error);
+    res.status(500).json({ success: false, message: 'Server error while registering device token' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/notifications/device-token:
+ *   delete:
+ *     summary: Remove a device FCM token (call on logout)
+ *     tags: [Notifications - Common]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token]
+ *             properties:
+ *               token:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Token removed
+ *       400:
+ *         description: Token is required
+ *       401:
+ *         description: Unauthorized
+ */
+router.delete('/device-token', auth, async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ success: false, message: 'Token is required' });
+    }
+    await User.updateOne({ _id: req.user.id }, { $pull: { fcmTokens: token } });
+    res.json({ success: true, message: 'Device token removed' });
+  } catch (error) {
+    console.error('Remove device token error:', error);
+    res.status(500).json({ success: false, message: 'Server error while removing device token' });
+  }
+});
 
 /**
  * @swagger

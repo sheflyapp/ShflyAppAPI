@@ -51,6 +51,11 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  fcmTokens: {
+    type: [String],
+    default: [],
+    select: false
+  },
   documents: [{
     filename: String,        // Cloudinary public_id
     originalName: String,    // Original filename
