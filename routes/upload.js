@@ -1,4 +1,7 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
 const { upload } = require('../controllers/uploadController');
@@ -76,7 +79,8 @@ router.post('/', auth, upload.array('files', 5), async (req, res) => {
       originalName: file.originalname,
       mimetype: file.mimetype,
       size: file.size,
-      url: `/uploads/${file.destination.split('/').pop()}/${file.filename}`,
+      url: file.path, // Cloudinary URL
+      publicId: file.filename,
       path: file.path
     }));
 
@@ -160,8 +164,12 @@ router.post('/image', auth, upload.single('image'), async (req, res) => {
 
     // Check if it's an image
     if (!req.file.mimetype.startsWith('image/')) {
-      // Delete the uploaded file
-      fs.unlinkSync(req.file.path);
+      // Delete the uploaded file from Cloudinary
+      try {
+        await require('../config/cloudinary').uploader.destroy(req.file.filename);
+      } catch (e) {
+        console.error('Could not delete non-image upload:', e.message);
+      }
       return res.status(400).json({
         success: false,
         message: 'Only image files are allowed'
@@ -173,7 +181,8 @@ router.post('/image', auth, upload.single('image'), async (req, res) => {
       originalName: req.file.originalname,
       mimetype: req.file.mimetype,
       size: req.file.size,
-      url: `/uploads/${req.file.destination.split('/').pop()}/${req.file.filename}`,
+      url: req.file.path, // Cloudinary URL
+      publicId: req.file.filename,
       path: req.file.path
     };
 
@@ -263,7 +272,11 @@ router.post('/document', auth, upload.single('document'), async (req, res) => {
 
     if (!allowedTypes.includes(req.file.mimetype)) {
       // Delete the uploaded file
-      fs.unlinkSync(req.file.path);
+      try {
+        await require('../config/cloudinary').uploader.destroy(req.file.filename);
+      } catch (e) {
+        console.error('Could not delete invalid upload:', e.message);
+      }
       return res.status(400).json({
         success: false,
         message: 'Only PDF and Word documents are allowed'
@@ -275,7 +288,7 @@ router.post('/document', auth, upload.single('document'), async (req, res) => {
       originalName: req.file.originalname,
       mimetype: req.file.mimetype,
       size: req.file.size,
-      url: `/uploads/documents/${req.file.filename}`,
+      url: req.file.path, // Cloudinary URL
       path: req.file.path,
       category: req.body.category || 'general'
     };
@@ -334,7 +347,11 @@ router.post('/profile-image', auth, upload.single('profileImage'), async (req, r
 
     // Check if it's an image
     if (!req.file.mimetype.startsWith('image/')) {
-      fs.unlinkSync(req.file.path);
+      try {
+        await require('../config/cloudinary').uploader.destroy(req.file.filename);
+      } catch (e) {
+        console.error('Could not delete non-image upload:', e.message);
+      }
       return res.status(400).json({
         success: false,
         message: 'Only image files are allowed'
@@ -344,7 +361,7 @@ router.post('/profile-image', auth, upload.single('profileImage'), async (req, r
     // Update user's profile image
     const User = require('../models/User');
     await User.findByIdAndUpdate(req.user.id, {
-      profileImage: `/uploads/profiles/${req.file.filename}`
+      profileImage: req.file.path
     });
 
     const imageData = {
@@ -352,7 +369,8 @@ router.post('/profile-image', auth, upload.single('profileImage'), async (req, r
       originalName: req.file.originalname,
       mimetype: req.file.mimetype,
       size: req.file.size,
-      url: `/uploads/profiles/${req.file.filename}`,
+      url: req.file.path, // Cloudinary URL
+      publicId: req.file.filename,
       path: req.file.path
     };
 
@@ -396,30 +414,24 @@ router.post('/profile-image', auth, upload.single('profileImage'), async (req, r
 router.delete('/:filename', auth, async (req, res) => {
   try {
     const { filename } = req.params;
-    
-    // Find the file in uploads directory
-    const uploadsDir = path.join(__dirname, '../uploads');
-    let filePath = null;
-    
-    // Search in all subdirectories
-    const subdirs = ['profiles', 'documents', 'chat', 'general'];
-    for (const subdir of subdirs) {
-      const testPath = path.join(uploadsDir, subdir, filename);
-      if (fs.existsSync(testPath)) {
-        filePath = testPath;
-        break;
-      }
+    const cloudinary = require('../config/cloudinary');
+
+    // Full public ID may be passed via ?publicId=; otherwise assume the default folder
+    const folder = process.env.CLOUDINARY_FOLDER || 'shflyapp_images';
+    const publicId = req.query.publicId || `${folder}/${path.parse(filename).name}`;
+
+    // PDFs/images are stored as 'image', Word documents as 'raw'
+    let result = await cloudinary.uploader.destroy(publicId);
+    if (result.result !== 'ok') {
+      result = await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' });
     }
-    
-    if (!filePath) {
+
+    if (result.result !== 'ok') {
       return res.status(404).json({
         success: false,
         message: 'File not found'
       });
     }
-
-    // Delete the file
-    fs.unlinkSync(filePath);
 
     res.json({
       success: true,

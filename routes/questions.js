@@ -1,5 +1,11 @@
 const express = require('express');
 const router = express.Router();
+
+// The schema stores attachments as URL strings; also accept { url, description } objects
+const normalizeAttachments = (attachments) =>
+  (attachments || [])
+    .map(a => (typeof a === 'string' ? a : a && a.url))
+    .filter(Boolean);
 const { body, param, query, validationResult } = require('express-validator');
 const Question = require('../models/Question');
 const Category = require('../models/Category');
@@ -49,15 +55,10 @@ const roleAuth = require('../middleware/roleAuth');
  *             type: string
  *         attachments:
  *           type: array
+ *           description: Attachment file URLs
  *           items:
- *             type: object
- *             properties:
- *               url:
- *                 type: string
- *                 description: File URL
- *               description:
- *                 type: string
- *                 description: File description
+ *             type: string
+ *             example: https://res.cloudinary.com/shflyapp/image/upload/v1/shflyapp_images/abc.png
  *         isAnonymous:
  *           type: boolean
  *           default: false
@@ -116,15 +117,10 @@ const roleAuth = require('../middleware/roleAuth');
  *             type: string
  *         attachments:
  *           type: array
+ *           description: File URLs (e.g. from POST /api/upload/image). Plain URL strings or { url } objects are accepted; stored as URL strings.
  *           items:
- *             type: object
- *             properties:
- *               url:
- *                 type: string
- *                 description: File URL
- *               description:
- *                 type: string
- *                 description: File description
+ *             type: string
+ *             example: https://res.cloudinary.com/shflyapp/image/upload/v1/shflyapp_images/abc.png
  *         isAnonymous:
  *           type: boolean
  *         isPublic:
@@ -230,7 +226,7 @@ router.post('/', auth, [
       description,
       priority: priority || 'medium',
       tags: tags || [],
-      attachments: attachments || [],
+      attachments: normalizeAttachments(attachments),
       isAnonymous: isAnonymous || false,
       isPublic: isPublic !== undefined ? isPublic : true
     });
@@ -579,7 +575,7 @@ router.put('/:id', auth, [
     if (description) updateData.description = description;
     if (priority) updateData.priority = priority;
     if (tags !== undefined) updateData.tags = tags;
-    if (attachments !== undefined) updateData.attachments = attachments;
+    if (attachments !== undefined) updateData.attachments = normalizeAttachments(attachments);
     if (isAnonymous !== undefined) updateData.isAnonymous = isAnonymous;
     if (isPublic !== undefined) updateData.isPublic = isPublic;
 
