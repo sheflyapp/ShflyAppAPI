@@ -5,6 +5,7 @@ const roleAuth = require('../middleware/roleAuth');
 const Chat = require('../models/Chat');
 const User = require('../models/User');
 const Question = require('../models/Question');
+const ProviderQuestion = require('../models/ProviderQuestion');
 
 /**
  * @swagger
@@ -162,9 +163,10 @@ router.post('/', auth, async (req, res) => {
       });
     }
 
-    // Check if question exists
+    // The id can belong to a general question or to a direct provider question
     const question = await Question.findById(questionId).populate('userId', '_id');
-    if (!question) {
+    const providerQuestion = question ? null : await ProviderQuestion.findById(questionId);
+    if (!question && !providerQuestion) {
       return res.status(404).json({
         success: false,
         message: 'Question not found'
@@ -173,7 +175,18 @@ router.post('/', auth, async (req, res) => {
 
     // Determine the second participant
     let otherParticipantId = null;
-    if (providerId) {
+    if (providerQuestion) {
+      // Direct provider question: the counterpart is the other party of that question
+      const seekerId = providerQuestion.seekerId.toString();
+      const questionProviderId = providerQuestion.providerId.toString();
+      if (req.user.id !== seekerId && req.user.id !== questionProviderId) {
+        return res.status(403).json({
+          success: false,
+          message: 'You are not a participant of this question'
+        });
+      }
+      otherParticipantId = req.user.id === seekerId ? questionProviderId : seekerId;
+    } else if (providerId) {
       // Validate provider exists
       const provider = await User.findById(providerId).select('_id');
       if (!provider) {
