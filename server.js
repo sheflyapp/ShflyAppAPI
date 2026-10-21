@@ -87,10 +87,10 @@ app.use(morgan('combined'));
 // Rate limiting with proxy support
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 1000, // limit each IP to 1000 requests per windowMs
   message: {
     error: 'Too many requests from this IP, please try again later.',
-    retryAfter: Math.ceil(15 * 60 / 1000) // 15 minutes in seconds
+    retryAfter: 15 * 60 // 15 minutes in seconds
   },
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
@@ -133,7 +133,7 @@ const limiter = rateLimit({
     res.status(429).json({
       error: 'Too many requests',
       message: 'Rate limit exceeded. Please try again later.',
-      retryAfter: Math.ceil(15 * 60 / 1000)
+      retryAfter: Math.ceil(res.getHeader('Retry-After') || 15 * 60)
     });
   }
 });
