@@ -2158,7 +2158,13 @@ router.put('/users/:id', auth, isAdmin, async (req, res) => {
       city,
       gender,
       price,
-      specializations
+      specializations,
+      dob,
+      languages,
+      chat,
+      call,
+      video,
+      availability
     } = req.body;
 
     const user = await User.findById(req.params.id);
@@ -2183,6 +2189,16 @@ router.put('/users/:id', auth, isAdmin, async (req, res) => {
     if (gender !== undefined) user.gender = gender;
     if (price !== undefined) user.price = price;
     if (specializations !== undefined) user.specializations = specializations;
+    if (dob !== undefined) user.dob = dob || undefined;
+    if (Array.isArray(languages)) user.languages = languages;
+    if (typeof chat === 'boolean') user.chat = chat;
+    if (typeof call === 'boolean') user.call = call;
+    if (typeof video === 'boolean') user.video = video;
+    if (availability && typeof availability === 'object') {
+      ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].forEach((day) => {
+        if (typeof availability[day] === 'boolean') user.availability[day] = availability[day];
+      });
+    }
 
     await user.save();
 
