@@ -2,6 +2,66 @@ const express = require('express');
 const router = express.Router();
 const { auth, isAdmin } = require('../middleware/auth');
 const User = require('../models/User');
+const { createFullProfileHandler } = require('../controllers/fullProfileController');
+
+/**
+ * @swagger
+ * /api/seekers/fullprofile:
+ *   post:
+ *     summary: Update full seeker profile (seekers only, own profile)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               fullname:
+ *                 type: string
+ *               username:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *                 example: "+917041857767"
+ *               gender:
+ *                 type: string
+ *                 enum: [male, female, other]
+ *               dob:
+ *                 type: string
+ *                 format: date
+ *               country:
+ *                 type: string
+ *               city:
+ *                 type: string
+ *               languages:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 example: [English, Arabic]
+ *               bio:
+ *                 type: string
+ *                 maxLength: 500
+ *               specializations:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Active category IDs
+ *     responses:
+ *       200:
+ *         description: Seeker profile updated successfully
+ *       400:
+ *         description: Validation error / duplicate email or username
+ *       403:
+ *         description: Only seekers can use this endpoint
+ *       500:
+ *         description: Server error
+ */
+router.post('/fullprofile', auth, createFullProfileHandler('seeker'));
 
 // @route   GET /api/seekers
 // @desc    Get all seekers (admin only)

@@ -4,6 +4,7 @@ const { auth, isAdmin } = require('../middleware/auth');
 const User = require('../models/User');
 const Category = require('../models/Category');
 const Question = require('../models/Question');
+const { createFullProfileHandler } = require('../controllers/fullProfileController');
 
 // @route   GET /api/providers
 // @desc    Get all providers (public)
@@ -159,6 +160,92 @@ router.post('/', auth, isAdmin, async (req, res) => {
     });
   }
 });
+
+/**
+ * @swagger
+ * /api/providers/fullprofile:
+ *   post:
+ *     summary: Update full provider profile (providers only, own profile)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               fullname:
+ *                 type: string
+ *                 example: Mohd Sazid Khan
+ *               username:
+ *                 type: string
+ *                 example: khansazidmohd
+ *               email:
+ *                 type: string
+ *                 example: khansazidmohd@gmail.com
+ *               phone:
+ *                 type: string
+ *                 example: "+918860131912"
+ *               gender:
+ *                 type: string
+ *                 enum: [male, female, other]
+ *               dob:
+ *                 type: string
+ *                 format: date
+ *                 example: "1991-06-03"
+ *               country:
+ *                 type: string
+ *                 example: India
+ *               city:
+ *                 type: string
+ *                 example: Delhi
+ *               languages:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 example: [English, Hindi]
+ *               price:
+ *                 type: number
+ *                 minimum: 0
+ *                 description: Price per hour
+ *                 example: 10
+ *               bio:
+ *                 type: string
+ *                 maxLength: 500
+ *               specializations:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Active category IDs
+ *               chat:
+ *                 type: boolean
+ *               call:
+ *                 type: boolean
+ *               video:
+ *                 type: boolean
+ *               availability:
+ *                 type: object
+ *                 properties:
+ *                   monday: { type: boolean }
+ *                   tuesday: { type: boolean }
+ *                   wednesday: { type: boolean }
+ *                   thursday: { type: boolean }
+ *                   friday: { type: boolean }
+ *                   saturday: { type: boolean }
+ *                   sunday: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Provider profile updated successfully
+ *       400:
+ *         description: Validation error / duplicate email or username
+ *       403:
+ *         description: Only providers can use this endpoint
+ *       500:
+ *         description: Server error
+ */
+router.post('/fullprofile', auth, createFullProfileHandler('provider'));
 
 // @route   GET /api/providers/questions
 // @desc    Get questions for providers based on their specializations
