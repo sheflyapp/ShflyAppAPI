@@ -6,6 +6,8 @@ const Chat = require('../models/Chat');
 const User = require('../models/User');
 const Question = require('../models/Question');
 const ProviderQuestion = require('../models/ProviderQuestion');
+const Payment = require('../models/Payment');
+const mongoose = require('mongoose');
 
 /**
  * @swagger
@@ -16,6 +18,16 @@ const ProviderQuestion = require('../models/ProviderQuestion');
  *     security:
  *       - bearerAuth: []
  *     parameters:
+ *       - in: query
+ *         name: chatId
+ *         schema:
+ *           type: string
+ *         description: Optional chat ID filter
+ *       - in: query
+ *         name: questionId
+ *         schema:
+ *           type: string
+ *         description: Optional question ID filter
  *       - in: query
  *         name: page
  *         schema:
@@ -30,7 +42,7 @@ const ProviderQuestion = require('../models/ProviderQuestion');
  *         description: Number of conversations per page
  *     responses:
  *       200:
- *         description: List of chat conversations
+ *         description: List of chat conversations (each includes paymentId, null until payment succeeds)
  *         content:
  *           application/json:
  *             schema:
@@ -52,17 +64,55 @@ router.get('/', auth, async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
+    const { chatId, questionId } = req.query;
 
-    const conversations = await Chat.find({
-      participants: req.user.id
-    })
-    .populate('participants', 'fullname username profileImage')
-    .populate('question', 'description status')
-    .sort({ updatedAt: -1 })
-    .skip(skip)
-    .limit(limit);
+    const filter = { participants: req.user.id };
+    if (chatId) {
+      if (!mongoose.Types.ObjectId.isValid(chatId)) {
+        return res.status(400).json({ success: false, message: 'Invalid chatId' });
+      }
+      filter._id = chatId;
+    }
+    if (questionId) {
+      if (!mongoose.Types.ObjectId.isValid(questionId)) {
+        return res.status(400).json({ success: false, message: 'Invalid questionId' });
+      }
+      filter.question = questionId;
+    }
 
-    const total = await Chat.countDocuments({ participants: req.user.id });
+    // question is not populated here: a chat can belong to a general Question or a
+    // ProviderQuestion, and populating only against Question returns null for the latter
+    const chats = await Chat.find(filter)
+      .populate('participants', 'fullname username profileImage')
+      .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const questionIds = chats.map(c => c.question);
+    const [questions, providerQuestions, payments] = await Promise.all([
+      Question.find({ _id: { $in: questionIds } }).select('description status').lean(),
+      ProviderQuestion.find({ _id: { $in: questionIds } }).select('question status').lean(),
+      Payment.find({ questionId: { $in: questionIds }, status: 'success' }).select('questionId').lean()
+    ]);
+
+    const questionMap = new Map();
+    questions.forEach(q => questionMap.set(q._id.toString(), q));
+    providerQuestions.forEach(q => questionMap.set(q._id.toString(), {
+      _id: q._id,
+      description: q.question,
+      status: q.status
+    }));
+    const paymentMap = new Map(payments.map(p => [p.questionId.toString(), p._id]));
+
+    // paymentId is null while the payment is missing or not yet successful
+    const conversations = chats.map(c => ({
+      ...c,
+      question: questionMap.get(c.question.toString()) || null,
+      paymentId: paymentMap.get(c.question.toString()) || null
+    }));
+
+    const total = await Chat.countDocuments(filter);
 
     res.json({
       success: true,
