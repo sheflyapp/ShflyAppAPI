@@ -3,6 +3,7 @@ const router = express.Router();
 const { auth, isAdmin } = require('../middleware/auth');
 const Payment = require('../models/Payment');
 const Question = require('../models/Question');
+const ProviderQuestion = require('../models/ProviderQuestion');
 const User = require('../models/User');
 
 /**
@@ -247,14 +248,16 @@ router.post('/', auth, async (req, res) => {
     }
     
     // Check if question exists
+    // The id can belong to a general question or to a direct provider question
     const question = await Question.findById(questionId);
-    if (!question) {
+    const providerQuestion = question ? null : await ProviderQuestion.findById(questionId);
+    if (!question && !providerQuestion) {
       return res.status(404).json({
         success: false,
         message: 'Question not found'
       });
     }
-    
+
     // Check if seeker and provider exist
     const seeker = await User.findById(seekerId);
     const provider = await User.findById(providerId);
@@ -298,8 +301,9 @@ router.post('/', auth, async (req, res) => {
     await payment.save();
     
     // Populate the payment for response
+    // questionId only populates for general questions; provider questions keep the raw id
     await payment.populate([
-      { path: 'questionId', select: 'description status' },
+      ...(question ? [{ path: 'questionId', select: 'description status' }] : []),
       { path: 'seekerId', select: 'fullname email' },
       { path: 'providerId', select: 'fullname email' }
     ]);
