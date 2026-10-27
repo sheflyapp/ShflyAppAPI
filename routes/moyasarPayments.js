@@ -1,6 +1,9 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
+const crypto = require('crypto');
+const mongoose = require('mongoose');
 const router = express.Router();
+const Payment = require('../models/Payment');
 
 // Import Moyasar service
 const moyasarService = require('../services/moyasarService');
@@ -773,47 +776,65 @@ router.get('/customers/:customerId/payment-methods', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.post('/webhooks', express.raw({ type: 'application/json' }), async (req, res) => {
+const WEBHOOK_STATUS = {
+  payment_paid: 'success',
+  payment_failed: 'failed',
+  payment_voided: 'cancelled'
+};
+
+// Moyasar sends the secret token configured in its dashboard inside the JSON body
+const isValidWebhookSecret = (received) => {
+  const expected = process.env.MOYASAR_WEBHOOK_SECRET;
+  if (!expected || typeof received !== 'string') return false;
+  const a = Buffer.from(received);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+};
+
+router.post('/webhooks', async (req, res) => {
   try {
-    const signature = req.headers['x-moyasar-signature'];
-    const body = req.body.toString();
-    
-    // Verify webhook signature
-    if (!moyasarService.verifyWebhookSignature(signature, body)) {
-      console.warn('Invalid webhook signature');
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid webhook signature' 
-      });
+    const { type, secret_token: secretToken, data } = req.body || {};
+
+    if (!isValidWebhookSecret(secretToken)) {
+      console.warn('Invalid Moyasar webhook secret token');
+      return res.status(400).json({ success: false, message: 'Invalid webhook secret token' });
     }
-    
-    // Parse webhook data
-    const webhookData = JSON.parse(body);
-    
-    // Process webhook
-    const result = moyasarService.processWebhook(webhookData);
-    
-    if (result.success) {
-      console.log('Webhook processed successfully:', result);
-      
-      // TODO: Update your database based on webhook data
-      // Example: Update payment status, create transaction records, etc.
-      
-      res.json({ 
-        success: true, 
-        message: 'Webhook processed successfully' 
-      });
-    } else {
-      console.warn('Webhook processing failed:', result);
-      res.status(400).json(result);
+
+    const newStatus = WEBHOOK_STATUS[type];
+    if (!newStatus || !data || !data.id) {
+      // Untracked event (authorized, captured, refunded, ...): acknowledge so Moyasar stops retrying
+      return res.json({ success: true, message: 'Webhook ignored' });
     }
+
+    // The app sends metadata.questionId when creating the Moyasar payment; there is one Payment per question.
+    // transactionId (Moyasar payment id) is the fallback for payments recorded with it.
+    const questionId = data.metadata && data.metadata.questionId;
+    const filters = [{ transactionId: data.id }];
+    if (questionId && mongoose.Types.ObjectId.isValid(questionId)) {
+      filters.push({ questionId });
+    }
+    const payment = await Payment.findOne({ $or: filters });
+    if (!payment) {
+      // Non-2xx makes Moyasar retry, which covers the webhook arriving before POST /api/payments
+      console.warn('Moyasar webhook: no payment found for', data.id, questionId);
+      return res.status(404).json({ success: false, message: 'Payment not found' });
+    }
+
+    // Never downgrade a payment that already succeeded
+    if (payment.status !== 'success') {
+      payment.status = newStatus;
+      // Keep the Moyasar payment id for reconciliation, unless another payment already holds it
+      if (payment.transactionId !== data.id &&
+          !(await Payment.exists({ transactionId: data.id }))) {
+        payment.transactionId = data.id;
+      }
+      await payment.save();
+    }
+
+    return res.json({ success: true, message: 'Webhook processed successfully' });
   } catch (error) {
     console.error('Webhook processing error:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Server error during webhook processing',
-      error: error.message 
-    });
+    return res.status(500).json({ success: false, message: 'Server error during webhook processing' });
   }
 });
 
