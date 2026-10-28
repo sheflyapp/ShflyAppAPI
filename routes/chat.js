@@ -8,6 +8,27 @@ const Question = require('../models/Question');
 const ProviderQuestion = require('../models/ProviderQuestion');
 const Payment = require('../models/Payment');
 const mongoose = require('mongoose');
+const moyasarService = require('../services/moyasarService');
+
+// Maps questionId -> successful payment id. A payment still pending in our DB is checked
+// against Moyasar directly, so the id shows up without waiting for the webhook.
+async function getPaymentIds(questionIds) {
+  const payments = await Payment.find({ questionId: { $in: questionIds } });
+
+  await Promise.all(payments
+    .filter(p => p.status === 'pending' && p.transactionId)
+    .map(async (p) => {
+      const result = await moyasarService.getPayment(p.transactionId);
+      if (result.success && result.payment.status === 'paid') {
+        p.status = 'success';
+        await p.save();
+      }
+    }));
+
+  return new Map(payments
+    .filter(p => p.status === 'success')
+    .map(p => [p.questionId.toString(), p._id]));
+}
 
 /**
  * @swagger
@@ -90,10 +111,10 @@ router.get('/', auth, async (req, res) => {
       .lean();
 
     const questionIds = chats.map(c => c.question);
-    const [questions, providerQuestions, payments] = await Promise.all([
+    const [questions, providerQuestions, paymentMap] = await Promise.all([
       Question.find({ _id: { $in: questionIds } }).select('description status').lean(),
       ProviderQuestion.find({ _id: { $in: questionIds } }).select('question status').lean(),
-      Payment.find({ questionId: { $in: questionIds }, status: 'success' }).select('questionId').lean()
+      getPaymentIds(questionIds)
     ]);
 
     const questionMap = new Map();
@@ -103,7 +124,6 @@ router.get('/', auth, async (req, res) => {
       description: q.question,
       status: q.status
     }));
-    const paymentMap = new Map(payments.map(p => [p.questionId.toString(), p._id]));
 
     // paymentId is null while the payment is missing or not yet successful
     const conversations = chats.map(c => ({
@@ -356,9 +376,11 @@ router.get('/by-question', auth, async (req, res) => {
       .slice(skip, skip + limit)
       .reverse();
 
+    const paymentIds = await getPaymentIds([questionId]);
+
     return res.json({
       success: true,
-      data: { ...chat.toObject(), messages },
+      data: { ...chat.toObject(), messages, paymentId: paymentIds.get(questionId) || null },
       pagination: {
         current: page,
         total: Math.ceil(chat.messages.length / limit),
