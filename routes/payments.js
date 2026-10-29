@@ -140,6 +140,141 @@ router.get('/', auth, isAdmin, async (req, res) => {
 
 /**
  * @swagger
+ * /api/payments/history:
+ *   get:
+ *     summary: Payment history of the logged-in seeker or provider
+ *     description: Seekers get the payments they made, providers get the payments they received. Optionally filtered by month and year (Saudi Arabia time, UTC+3).
+ *     tags: [Payments - Common]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: month
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 12
+ *         description: Month number (1-12). Uses the current year when year is not given
+ *       - in: query
+ *         name: year
+ *         schema:
+ *           type: integer
+ *         description: Year, e.g. 2026. Without month, returns the whole year
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [all, pending, processing, success, failed, cancelled]
+ *         description: Filter by payment status
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *     responses:
+ *       200:
+ *         description: Payment history retrieved successfully
+ *       400:
+ *         description: Invalid month, year or status
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.get('/history', auth, async (req, res) => {
+  try {
+    const { month, year, status } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const userId = req.userProfile._id;
+    const isProvider = req.userProfile.userType === 'provider';
+    const filter = isProvider ? { providerId: userId } : { seekerId: userId };
+
+    if (status && status !== 'all') {
+      if (!Payment.schema.path('status').enumValues.includes(status)) {
+        return res.status(400).json({ success: false, message: 'Invalid status' });
+      }
+      filter.status = status;
+    }
+
+    if (month || year) {
+      const m = month ? parseInt(month) : null;
+      const y = year ? parseInt(year) : new Date().getUTCFullYear();
+      if ((m !== null && (!(m >= 1 && m <= 12))) || !(y >= 1970 && y <= 3000)) {
+        return res.status(400).json({ success: false, message: 'Invalid month or year' });
+      }
+      // Month/year boundaries follow Saudi Arabia time (UTC+3, no DST)
+      const SAUDI_OFFSET_MS = 3 * 60 * 60 * 1000;
+      const from = new Date(Date.UTC(y, m ? m - 1 : 0, 1) - SAUDI_OFFSET_MS);
+      const to = new Date((m ? Date.UTC(y, m, 1) : Date.UTC(y + 1, 0, 1)) - SAUDI_OFFSET_MS);
+      filter.createdAt = { $gte: from, $lt: to };
+    }
+
+    const [payments, total, successTotals] = await Promise.all([
+      Payment.find(filter)
+        .populate('seekerId', 'fullname username profileImage')
+        .populate('providerId', 'fullname username profileImage')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Payment.countDocuments(filter),
+      Payment.aggregate([
+        { $match: { ...filter, status: 'success' } },
+        { $group: { _id: null, amount: { $sum: '$amount' }, count: { $sum: 1 } } }
+      ])
+    ]);
+
+    // questionId can point to a Question or a ProviderQuestion
+    const questionIds = payments.map(p => p.questionId);
+    const [questions, providerQuestions] = await Promise.all([
+      Question.find({ _id: { $in: questionIds } }).select('description status').lean(),
+      ProviderQuestion.find({ _id: { $in: questionIds } }).select('question status').lean()
+    ]);
+    const questionMap = new Map();
+    questions.forEach(q => questionMap.set(q._id.toString(), q));
+    providerQuestions.forEach(q => questionMap.set(q._id.toString(), {
+      _id: q._id,
+      description: q.question,
+      status: q.status
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        payments: payments.map(p => ({
+          ...p,
+          question: questionMap.get(p.questionId.toString()) || null
+        })),
+        summary: {
+          successfulPayments: successTotals[0] ? successTotals[0].count : 0,
+          totalSuccessfulAmount: successTotals[0] ? successTotals[0].amount : 0
+        },
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(total / limit),
+          totalPayments: total,
+          limit,
+          hasNext: page * limit < total,
+          hasPrev: page > 1
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get payment history error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching payment history' });
+  }
+});
+
+/**
+ * @swagger
  * /api/payments:
  *   post:
  *     summary: Create a new payment
